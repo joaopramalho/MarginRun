@@ -6,6 +6,15 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A1000001304A000100000001 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = A1000004304A000100000001 /* RevenueCat */; };
+		A1000002304A000100000001 /* RevenueCatUI in Frameworks */ = {isa = PBXBuildFile; productRef = A1000005304A000100000001 /* RevenueCatUI */; };
+		A2000001304A000100000001 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = A2000003304A000100000001 /* PostHog */; };
+		B100000B0000000000000001 /* MarginRunWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B10000010000000000000001 /* MarginRunWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B10000100000000000000001 /* LaborTimerActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000F0000000000000001 /* LaborTimerActivityAttributes.swift */; };
+		B10000110000000000000001 /* LaborTimerActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000F0000000000000001 /* LaborTimerActivityAttributes.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		0D1B789930465D7F00D3AA39 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,12 +30,37 @@
 			remoteGlobalIDString = 0D1B788830465D7D00D3AA39;
 			remoteInfo = MarginRun;
 		};
+		B100000D0000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0D1B788130465D7D00D3AA39 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B10000030000000000000001;
+			remoteInfo = MarginRunWidgets;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B100000A0000000000000001 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B100000B0000000000000001 /* MarginRunWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0D1B788930465D7D00D3AA39 /* MarginRun.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MarginRun.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0D1B789830465D7F00D3AA39 /* MarginRunTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MarginRunTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0D1B78A230465D7F00D3AA39 /* MarginRunUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MarginRunUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000010000000000000001 /* MarginRunWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MarginRunWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B100000F0000000000000001 /* LaborTimerActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaborTimerActivityAttributes.swift; sourceTree = "<group>"; };
+		B10000130000000000000001 /* MarginRun-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "MarginRun-Info.plist"; sourceTree = "<group>"; };
+		B10000140000000000000001 /* MarginRunWidgets-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "MarginRunWidgets-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -45,6 +79,11 @@
 			path = MarginRunUITests;
 			sourceTree = "<group>";
 		};
+		B10000020000000000000001 /* MarginRunWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MarginRunWidgets;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,6 +91,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2000001304A000100000001 /* PostHog in Frameworks */,
+				A1000001304A000100000001 /* RevenueCat in Frameworks */,
+				A1000002304A000100000001 /* RevenueCatUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -69,6 +111,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B10000050000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -76,6 +125,9 @@
 			isa = PBXGroup;
 			children = (
 				0D1B788B30465D7D00D3AA39 /* MarginRun */,
+				B10000020000000000000001 /* MarginRunWidgets */,
+				B100000E0000000000000001 /* MarginRunShared */,
+				B10000120000000000000001 /* Config */,
 				0D1B789B30465D7F00D3AA39 /* MarginRunTests */,
 				0D1B78A530465D7F00D3AA39 /* MarginRunUITests */,
 				0D1B788A30465D7D00D3AA39 /* Products */,
@@ -88,8 +140,26 @@
 				0D1B788930465D7D00D3AA39 /* MarginRun.app */,
 				0D1B789830465D7F00D3AA39 /* MarginRunTests.xctest */,
 				0D1B78A230465D7F00D3AA39 /* MarginRunUITests.xctest */,
+				B10000010000000000000001 /* MarginRunWidgets.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		B100000E0000000000000001 /* MarginRunShared */ = {
+			isa = PBXGroup;
+			children = (
+				B100000F0000000000000001 /* LaborTimerActivityAttributes.swift */,
+			);
+			path = MarginRunShared;
+			sourceTree = "<group>";
+		};
+		B10000120000000000000001 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				B10000130000000000000001 /* MarginRun-Info.plist */,
+				B10000140000000000000001 /* MarginRunWidgets-Info.plist */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -102,16 +172,21 @@
 				0D1B788530465D7D00D3AA39 /* Sources */,
 				0D1B788630465D7D00D3AA39 /* Frameworks */,
 				0D1B788730465D7D00D3AA39 /* Resources */,
+				B100000A0000000000000001 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B100000C0000000000000001 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				0D1B788B30465D7D00D3AA39 /* MarginRun */,
 			);
 			name = MarginRun;
 			packageProductDependencies = (
+				A2000003304A000100000001 /* PostHog */,
+				A1000004304A000100000001 /* RevenueCat */,
+				A1000005304A000100000001 /* RevenueCatUI */,
 			);
 			productName = MarginRun;
 			productReference = 0D1B788930465D7D00D3AA39 /* MarginRun.app */;
@@ -163,6 +238,28 @@
 			productReference = 0D1B78A230465D7F00D3AA39 /* MarginRunUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		B10000030000000000000001 /* MarginRunWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B10000070000000000000001 /* Build configuration list for PBXNativeTarget "MarginRunWidgets" */;
+			buildPhases = (
+				B10000040000000000000001 /* Sources */,
+				B10000050000000000000001 /* Frameworks */,
+				B10000060000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B10000020000000000000001 /* MarginRunWidgets */,
+			);
+			name = MarginRunWidgets;
+			packageProductDependencies = (
+			);
+			productName = MarginRunWidgets;
+			productReference = B10000010000000000000001 /* MarginRunWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -175,6 +272,11 @@
 				TargetAttributes = {
 					0D1B788830465D7D00D3AA39 = {
 						CreatedOnToolsVersion = 26.6;
+						SystemCapabilities = {
+							com.apple.InAppPurchase = {
+								enabled = 1;
+							};
+						};
 					};
 					0D1B789730465D7F00D3AA39 = {
 						CreatedOnToolsVersion = 26.6;
@@ -183,6 +285,9 @@
 					0D1B78A130465D7F00D3AA39 = {
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = 0D1B788830465D7D00D3AA39;
+					};
+					B10000030000000000000001 = {
+						CreatedOnToolsVersion = 26.6;
 					};
 				};
 			};
@@ -195,6 +300,10 @@
 			);
 			mainGroup = 0D1B788030465D7D00D3AA39;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A1000003304A000100000001 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */,
+				A2000002304A000100000001 /* XCRemoteSwiftPackageReference "posthog-ios" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0D1B788A30465D7D00D3AA39 /* Products */;
 			projectDirPath = "";
@@ -203,6 +312,7 @@
 				0D1B788830465D7D00D3AA39 /* MarginRun */,
 				0D1B789730465D7F00D3AA39 /* MarginRunTests */,
 				0D1B78A130465D7F00D3AA39 /* MarginRunUITests */,
+				B10000030000000000000001 /* MarginRunWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -229,6 +339,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B10000060000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -236,6 +353,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B10000100000000000000001 /* LaborTimerActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -253,6 +371,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B10000040000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000110000000000000001 /* LaborTimerActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +391,11 @@
 			isa = PBXTargetDependency;
 			target = 0D1B788830465D7D00D3AA39 /* MarginRun */;
 			targetProxy = 0D1B78A330465D7F00D3AA39 /* PBXContainerItemProxy */;
+		};
+		B100000C0000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B10000030000000000000001 /* MarginRunWidgets */;
+			targetProxy = B100000D0000000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -393,23 +524,35 @@
 		0D1B78AD30465D7F00D3AA39 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = MarginRun;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y6496SB773;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/MarginRun-Info.plist";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take photos of receipts and attach them to expenses.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_POSTHOG_API_KEY = "$(POSTHOG_API_KEY)";
+				"INFOPLIST_KEY_POSTHOG_API_KEY[arch=*]" = "$(POSTHOG_API_KEY)";
+				INFOPLIST_KEY_POSTHOG_HOST = "$(POSTHOG_HOST)";
+				"INFOPLIST_KEY_POSTHOG_HOST[arch=*]" = "$(POSTHOG_HOST)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 17;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				POSTHOG_API_KEY = "";
+				"POSTHOG_API_KEY[arch=*]" = phc_tU4hRjWBjwSvBpisekU7Hw3gkx7X2x3kWMTTSiEEx6L4;
+				POSTHOG_HOST = "";
+				"POSTHOG_HOST[arch=*]" = "https://us.i.posthog.com";
 				PRODUCT_BUNDLE_IDENTIFIER = com.joaopsr.MarginRun;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -425,23 +568,35 @@
 		0D1B78AE30465D7F00D3AA39 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = MarginRun;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y6496SB773;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/MarginRun-Info.plist";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take photos of receipts and attach them to expenses.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_POSTHOG_API_KEY = "$(POSTHOG_API_KEY)";
+				"INFOPLIST_KEY_POSTHOG_API_KEY[arch=*]" = "$(POSTHOG_API_KEY)";
+				INFOPLIST_KEY_POSTHOG_HOST = "$(POSTHOG_HOST)";
+				"INFOPLIST_KEY_POSTHOG_HOST[arch=*]" = "$(POSTHOG_HOST)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 17;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				POSTHOG_API_KEY = "";
+				"POSTHOG_API_KEY[arch=*]" = phc_tU4hRjWBjwSvBpisekU7Hw3gkx7X2x3kWMTTSiEEx6L4;
+				POSTHOG_HOST = "";
+				"POSTHOG_HOST[arch=*]" = "https://us.i.posthog.com";
 				PRODUCT_BUNDLE_IDENTIFIER = com.joaopsr.MarginRun;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -538,6 +693,68 @@
 			};
 			name = Release;
 		};
+		B10000080000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y6496SB773;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/MarginRunWidgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "MarginRun Labor Timer";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joaopsr.MarginRun.MarginRunWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B10000090000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y6496SB773;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/MarginRunWidgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "MarginRun Labor Timer";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joaopsr.MarginRun.MarginRunWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -577,7 +794,53 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		B10000070000000000000001 /* Build configuration list for PBXNativeTarget "MarginRunWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B10000080000000000000001 /* Debug */,
+				B10000090000000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A1000003304A000100000001 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/RevenueCat/purchases-ios-spm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.83.2;
+			};
+		};
+		A2000002304A000100000001 /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/PostHog/posthog-ios.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.71.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A1000004304A000100000001 /* RevenueCat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1000003304A000100000001 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCat;
+		};
+		A1000005304A000100000001 /* RevenueCatUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1000003304A000100000001 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCatUI;
+		};
+		A2000003304A000100000001 /* PostHog */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A2000002304A000100000001 /* XCRemoteSwiftPackageReference "posthog-ios" */;
+			productName = PostHog;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 0D1B788130465D7D00D3AA39 /* Project object */;
 }

@@ -1,0 +1,155 @@
+import SwiftUI
+import SwiftData
+
+struct JobsListView: View {
+    @Query(sort: \Job.createdAt, order: .reverse) private var jobs: [Job]
+    @EnvironmentObject private var subscriptions: SubscriptionStore
+    @State private var isCreatingJob = false
+    @State private var paywallFeature: ProFeature?
+    @State private var selectedFilter: JobHistoryFilter = .active
+    @State private var searchText = ""
+    /// Where the create sheet was opened from, so the funnel can tell a
+    /// deliberate "Create Job" from the empty state's prompt.
+    @State private var creationSource: JobCreationSource = .history
+
+    /// Only active jobs count toward the free limit, so completing work always
+    /// frees a slot instead of forcing an upgrade.
+    private var activeJobCount: Int {
+        jobs.filter { $0.status == .active }.count
+    }
+
+    private func startCreatingJob(from source: JobCreationSource) {
+        creationSource = source
+        guard subscriptions.requireActiveJobSlot(
+            activeJobCount: activeJobCount,
+            presenting: $paywallFeature
+        ) else { return }
+        isCreatingJob = true
+    }
+
+    private var filteredJobs: [Job] {
+        jobs.filter { job in
+            guard job.status == selectedFilter.status else { return false }
+            guard !searchText.isEmpty else { return true }
+            return job.name.localizedCaseInsensitiveContains(searchText)
+                || job.customerName.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Picker("Job status", selection: $selectedFilter) {
+                    ForEach(JobHistoryFilter.allCases) { filter in
+                        Text(filter.title).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+            }
+
+            Section(selectedFilter.sectionTitle) {
+                ForEach(filteredJobs) { job in
+                    NavigationLink {
+                        JobDetailView(job: job)
+                    } label: {
+                        JobSummaryRow(job: job)
+                    }
+                }
+            }
+        }
+        .navigationTitle("History")
+        .searchable(text: $searchText, prompt: "Job or customer")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Create Job") {
+                    startCreatingJob(from: .history)
+                }
+                .accessibilityIdentifier("createJobButton")
+            }
+        }
+        .sheet(isPresented: $isCreatingJob) {
+            CreateJobView(source: creationSource)
+        }
+        .proPaywall(for: $paywallFeature) { feature in
+            // Buying Pro because the third job was blocked should open the
+            // create sheet, not return to the button that was blocked.
+            if feature == .unlimitedJobs { isCreatingJob = true }
+        }
+        .overlay {
+            if filteredJobs.isEmpty {
+                ContentUnavailableView {
+                    Label(emptyStateTitle, systemImage: selectedFilter.systemImage)
+                } description: {
+                    Text(emptyStateDescription)
+                } actions: {
+                    if jobs.isEmpty && searchText.isEmpty {
+                        Button("Create Job") {
+                            startCreatingJob(from: .historyEmptyState)
+                        }
+                        .accessibilityIdentifier("createJobEmptyStateButton")
+                    }
+                }
+                .offset(y: 70)
+            }
+        }
+    }
+
+    private var emptyStateTitle: String {
+        if !searchText.isEmpty { return "No matches" }
+        return selectedFilter == .active ? "No active jobs" : "No completed jobs"
+    }
+
+    private var emptyStateDescription: String {
+        if !searchText.isEmpty {
+            return "Try searching for a different job or customer."
+        }
+        return selectedFilter == .active
+            ? "Create a job to start tracking its budget."
+            : "Completed jobs and their final results will appear here."
+    }
+}
+
+private enum JobHistoryFilter: String, CaseIterable, Identifiable {
+    case active
+    case completed
+
+    var id: String { rawValue }
+
+    var status: JobStatus {
+        switch self {
+        case .active: .active
+        case .completed: .completed
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .active: "Active"
+        case .completed: "Completed"
+        }
+    }
+
+    var sectionTitle: String {
+        switch self {
+        case .active: "Active jobs"
+        case .completed: "Completed jobs"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .active: "hammer"
+        case .completed: "checkmark.seal"
+        }
+    }
+}
+
+#Preview {
+    NavigationStack {
+        JobsListView()
+    }
+    .modelContainer(PreviewSupport.container())
+    .environmentObject(SubscriptionStore(entitlementOverride: false))
+}

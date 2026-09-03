@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Xcode build output
+build/
+DerivedData/
+*.xcuserstate
+*.moved-aside
+
+# Per-developer Xcode state: window layout, breakpoints, scheme ordering.
+# Nothing here affects a build, and it conflicts on every pull.
+xcuserdata/
+
+# Generated screenshots. The light/ and dark/ catalogues are reproducible with
+# `xcodebuild test -only-testing:MarginRunUITests/ScreenshotCatalog`, and the
+# App Store captures are marketing assets that belong outside the source tree.
+Screenshots/
+Screenshots.zip
