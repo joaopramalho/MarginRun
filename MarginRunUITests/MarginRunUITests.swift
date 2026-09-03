@@ -54,6 +54,42 @@ final class MarginRunUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["receiptGuidanceFooter"].exists)
     }
 
+    /// Save is the only confirmation.
+    ///
+    /// The receipt section used to carry a separate "Confirm receipt details"
+    /// row that Save was gated on. With the scanner filling the vendor, total
+    /// and date, the form looked finished, so the one control standing between
+    /// the customer and a saved expense was the one they had no reason to
+    /// notice — it sat among "Retake photo" and "Replace from library" as just
+    /// another secondary row. Entering a valid amount must be enough.
+    @MainActor
+    func testAnAmountIsEnoughToSaveAnExpense() throws {
+        let app = launchUsedInstall()
+
+        let activeJob = app.staticTexts["Backyard fence"].firstMatch
+        XCTAssertTrue(activeJob.waitForExistence(timeout: 3))
+        activeJob.tap()
+        app.buttons["addExpenseButton"].tap()
+
+        XCTAssertTrue(app.staticTexts["receiptSectionHeader"].waitForExistence(timeout: 3))
+        XCTAssertFalse(
+            app.buttons["Confirm receipt details"].exists,
+            "The separate confirmation step should be gone"
+        )
+
+        let save = app.buttons["Save"].firstMatch
+        XCTAssertTrue(save.waitForExistence(timeout: 3))
+        XCTAssertFalse(save.isEnabled, "An expense with no amount cannot be saved")
+
+        let amount = app.textFields["Amount"].firstMatch
+        XCTAssertTrue(amount.waitForExistence(timeout: 3))
+        amount.tap()
+        amount.typeText("112")
+        dismissKeyboard(in: app)
+
+        XCTAssertTrue(save.isEnabled, "A valid amount is the only thing Save requires")
+    }
+
     @MainActor
     func testAddLaborShowsCalculatedCostForm() throws {
         let app = launchUsedInstall()

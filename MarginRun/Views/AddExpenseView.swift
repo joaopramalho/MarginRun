@@ -20,7 +20,9 @@ struct AddExpenseView: View {
     @State private var receiptImageData: Data?
     @State private var isShowingCamera = false
     @State private var isScanningReceipt = false
-    @State private var didConfirmReceipt = false
+    /// What the scan actually did, shown as feedback rather than as a step.
+    /// `nil` until a scan finishes.
+    @State private var scanMessage: String?
     @State private var scanGeneration = UUID()
     @State private var isSaving = false
     @State private var receiptErrorMessage: String?
@@ -42,8 +44,7 @@ struct AddExpenseView: View {
             !isScanningReceipt,
             job.status == .active,
             let parsedAmount,
-            parsedAmount > 0,
-            receiptImageData == nil || didConfirmReceipt
+            parsedAmount > 0
         {
             return true
         }
@@ -86,10 +87,6 @@ struct AddExpenseView: View {
                     scanReceipt(newData)
                 }
             }
-            .onChange(of: category) { _, _ in invalidateReceiptConfirmation() }
-            .onChange(of: amountText) { _, _ in invalidateReceiptConfirmation() }
-            .onChange(of: vendor) { _, _ in invalidateReceiptConfirmation() }
-            .onChange(of: expenseDate) { _, _ in invalidateReceiptConfirmation() }
             .proPaywall(for: $paywallFeature) { feature in
                 // Buying Pro with a photo already attached should scan that
                 // photo, not make the customer remove and re-add it.
@@ -157,18 +154,13 @@ struct AddExpenseView: View {
                     Text("Scanning receipt…")
                 }
                 .foregroundStyle(.secondary)
-            } else if receiptImageData != nil {
-                if didConfirmReceipt {
-                    Label("Receipt details confirmed", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                } else {
-                    Button {
-                        didConfirmReceipt = true
-                    } label: {
-                        Label("Confirm receipt details", systemImage: "checkmark.circle")
-                    }
-                    .disabled(parsedAmount == nil || parsedAmount! <= 0)
-                }
+            } else if let scanMessage, receiptImageData != nil {
+                // Feedback, not a gate. Saving is the human confirmation, so
+                // the customer is told what was filled and left to review it.
+                Text(scanMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("receiptScanMessage")
             }
 
             if let receiptErrorMessage {
@@ -209,7 +201,7 @@ struct AddExpenseView: View {
                         selectedPhotoItem = nil
                         receiptSource = nil
                         isScanningReceipt = false
-                        didConfirmReceipt = false
+                        scanMessage = nil
                         receiptErrorMessage = nil
                     }
                 }
@@ -303,7 +295,7 @@ struct AddExpenseView: View {
         let generation = UUID()
         scanGeneration = generation
         isScanningReceipt = true
-        didConfirmReceipt = false
+        scanMessage = nil
         receiptErrorMessage = nil
 
         analytics.track(.receiptOCRStarted)
@@ -329,19 +321,22 @@ struct AddExpenseView: View {
                         fieldsExtracted: fieldsExtracted
                     )
                 )
+
+                // Says what happened without asking for anything. A scan that
+                // found nothing is the case worth naming — otherwise a blank
+                // form after a photo reads as the feature having failed.
+                scanMessage = fieldsExtracted > 0
+                    ? "MarginRun filled the fields it could detect"
+                    : "Nothing was filled automatically — enter the details manually"
             } catch {
                 guard scanGeneration == generation, receiptImageData == imageData else { return }
                 receiptErrorMessage = error.localizedDescription
+                scanMessage = nil
                 analytics.track(.receiptOCRCompleted(outcome: .failed, fieldsExtracted: 0))
             }
 
             guard scanGeneration == generation, receiptImageData == imageData else { return }
             isScanningReceipt = false
         }
-    }
-
-    private func invalidateReceiptConfirmation() {
-        guard receiptImageData != nil, !isScanningReceipt else { return }
-        didConfirmReceipt = false
     }
 }
