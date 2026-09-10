@@ -33,6 +33,15 @@ nonisolated enum PaywallFixture {
             localizedDescription: "Everything in MarginRun Pro, billed yearly.",
             subscriptionGroupIdentifier: "marginrun.pro",
             subscriptionPeriod: SubscriptionPeriod(value: 1, unit: .year),
+            introductoryDiscount: TestStoreProductDiscount(
+                identifier: "yearly-7-day-trial",
+                price: 0,
+                localizedPriceString: "$0.00",
+                paymentMode: .freeTrial,
+                subscriptionPeriod: SubscriptionPeriod(value: 1, unit: .week),
+                numberOfPeriods: 1,
+                type: .introductory
+            ),
             locale: Locale(identifier: "en_US")
         )
 

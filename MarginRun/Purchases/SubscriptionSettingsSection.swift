@@ -13,6 +13,7 @@ struct SubscriptionSettingsSection: View {
 
     @State private var isShowingGeneralPaywall = false
     @State private var isShowingCustomerCenter = false
+    @StateObject private var offerCodeRedemption = OfferCodeRedemptionPresentation()
 
     var body: some View {
         Section {
@@ -57,6 +58,19 @@ struct SubscriptionSettingsSection: View {
                 .disabled(store.isRestoring)
                 .accessibilityIdentifier("settingsRestoreButton")
             }
+
+            Button {
+                offerCodeRedemption.present(using: store, from: .settings)
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Redeem Offer Code")
+                    Text("Have an App Store offer code? Redeem it here.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accessibilityIdentifier("settingsRedeemOfferCodeButton")
         } header: {
             Text("Subscription")
         } footer: {
@@ -65,6 +79,10 @@ struct SubscriptionSettingsSection: View {
                  : "One subscription, every device signed in to your App Store account.")
         }
         .proPaywall(isPresented: $isShowingGeneralPaywall)
+        .appStoreOfferCodeRedemption(
+            presentation: offerCodeRedemption,
+            source: .settings
+        )
         .presentCustomerCenter(
             isPresented: $isShowingCustomerCenter,
             restoreCompleted: { _ in

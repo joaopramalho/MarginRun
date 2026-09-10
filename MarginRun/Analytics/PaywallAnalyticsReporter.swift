@@ -6,9 +6,13 @@ import Foundation
 struct PaywallAnalyticsReporter {
     private(set) var didReport = false
 
-    mutating func reportIfNeeded(feature: ProFeature?, analytics: AnalyticsService) {
+    mutating func reportIfNeeded(
+        feature: ProFeature?,
+        source: PaywallSource,
+        analytics: AnalyticsService
+    ) {
         guard !didReport else { return }
         didReport = true
-        analytics.track(.paywallViewed(feature: feature))
+        analytics.track(.paywallViewed(feature: feature, source: source))
     }
 }

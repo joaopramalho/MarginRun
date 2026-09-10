@@ -48,6 +48,7 @@ final class MarginRunUITests: XCTestCase {
         activeJob.tap()
         app.buttons["addExpenseButton"].tap()
 
+        XCTAssertTrue(app.navigationBars["Add Expense"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["receiptSectionHeader"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["receiptLibraryButton"].exists)
         XCTAssertTrue(app.datePickers["expenseDatePicker"].exists)
@@ -109,6 +110,231 @@ final class MarginRunUITests: XCTestCase {
         XCTAssertTrue(app.textFields["laborHourlyCostField"].exists)
         XCTAssertTrue(app.datePickers["laborDatePicker"].exists)
         XCTAssertTrue(app.staticTexts["laborCostLabel"].exists)
+    }
+
+    // MARK: - Revising and removing a job
+
+    /// A job's contract value and estimate drive every figure in the app, and
+    /// were previously frozen at creation — a mistyped contract value made that
+    /// job's margin permanently wrong.
+    ///
+    /// Asserted on identifiers rather than on the amounts themselves: the
+    /// arithmetic of an edit is covered by `EditJobDraftTests`, and what this
+    /// has to prove is that the form is reachable, arrives already holding the
+    /// job's own numbers, and writes them back.
+    @MainActor
+    func testEditingAnActiveJobIsReachableAndSeeded() throws {
+        let app = launchUsedInstall()
+
+        let activeJob = app.staticTexts["Backyard fence"].firstMatch
+        XCTAssertTrue(activeJob.waitForExistence(timeout: 3))
+        activeJob.tap()
+
+        app.buttons["jobOptionsMenu"].tap()
+        let edit = app.buttons["editJobButton"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 3), "An active job should offer Edit Job")
+        edit.tap()
+
+        XCTAssertTrue(app.navigationBars["Edit Job"].waitForExistence(timeout: 3))
+
+        // Seeded, not blank. An edit form that opens empty is a delete form.
+        let contractValue = app.textFields["editJobContractValueField"]
+        XCTAssertTrue(contractValue.exists)
+        XCTAssertFalse(
+            (contractValue.value as? String ?? "").isEmpty,
+            "The form should open on the job's current contract value"
+        )
+
+        // Nothing has changed yet, so there is nothing to save.
+        XCTAssertFalse(
+            app.buttons["editJobSaveButton"].isEnabled,
+            "Save should stay inert until an actual change is made"
+        )
+
+        replaceText(in: app.textFields["editJobNameField"], with: "Backyard fence phase 2", in: app)
+        dismissKeyboard(in: app)
+
+        let save = app.buttons["editJobSaveButton"]
+        XCTAssertTrue(waitUntilHittable(save, timeout: 3))
+        XCTAssertTrue(save.isEnabled, "A real change should enable Save")
+        save.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Backyard fence phase 2"].waitForExistence(timeout: 5),
+            "The edit should land on the job it came from"
+        )
+    }
+
+    /// A completed job reads from the snapshot taken at completion, so editing
+    /// one would leave a final result that no longer matches the numbers behind
+    /// it. Removing it stays available.
+    @MainActor
+    func testCompletedJobsOfferNoEdit() throws {
+        let app = launchUsedInstall()
+
+        app.tabBars.buttons["History"].tap()
+        app.segmentedControls.buttons["Completed"].tap()
+
+        let completedJob = app.staticTexts["Kitchen remodel"]
+        XCTAssertTrue(completedJob.waitForExistence(timeout: 3))
+        completedJob.tap()
+
+        XCTAssertFalse(
+            app.buttons["addExpenseButton"].exists,
+            "Quick Add Expense should only be available while the job is active"
+        )
+
+        app.buttons["jobOptionsMenu"].tap()
+        let delete = app.buttons["deleteJobButton"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 3))
+        XCTAssertFalse(
+            app.buttons["editJobButton"].exists,
+            "A completed job's numbers are a frozen record, not a draft"
+        )
+    }
+
+    /// Deleting a job takes its expenses, labor and receipt photos with it, so
+    /// the confirmation has to say so before it happens.
+    @MainActor
+    func testDeletingAJobConfirmsBeforeItTakesTheCostsWithIt() throws {
+        let app = launchUsedInstall()
+
+        let activeJob = app.staticTexts["Backyard fence"].firstMatch
+        XCTAssertTrue(activeJob.waitForExistence(timeout: 3))
+        activeJob.tap()
+
+        app.buttons["jobOptionsMenu"].tap()
+        let delete = app.buttons["deleteJobButton"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 3))
+        delete.tap()
+
+        let confirm = app.buttons["confirmDeleteJobButton"].firstMatch
+        XCTAssertTrue(
+            confirm.waitForExistence(timeout: 3),
+            "Deleting a job should ask first"
+        )
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS %@", "can’t be undone")
+            ).firstMatch.exists,
+            "The confirmation should say what it costs"
+        )
+
+        confirm.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Dashboard"].waitForExistence(timeout: 5),
+            "Deleting the job being viewed should leave that screen"
+        )
+        XCTAssertFalse(
+            app.staticTexts["Backyard fence"].waitForExistence(timeout: 2),
+            "The deleted job should be gone from the dashboard"
+        )
+    }
+
+    // MARK: - Correcting recorded costs
+
+    /// An expense's amount could previously only be changed as a side effect of
+    /// replacing its receipt photo, so an expense with no photo had no
+    /// correction at all short of deleting and retyping it.
+    @MainActor
+    func testARecordedExpenseCanBeCorrected() throws {
+        let app = launchUsedInstall()
+
+        app.tabBars.buttons["History"].tap()
+        app.segmentedControls.buttons["Completed"].tap()
+        let completedJob = app.staticTexts["Kitchen remodel"]
+        XCTAssertTrue(completedJob.waitForExistence(timeout: 3))
+        completedJob.tap()
+
+        // A completed job's costs open read-only: its result is a frozen record.
+        // Addressed by identifier, because the completed view also lists the
+        // same category names under "Cost drivers".
+        let expenseRow = app.buttons["expenseRowButton"].firstMatch
+        XCTAssertTrue(scrollToElement(expenseRow, in: app), "No expense row came into view")
+        expenseRow.tap()
+        XCTAssertTrue(app.navigationBars["Expense"].waitForExistence(timeout: 3))
+        XCTAssertFalse(
+            app.buttons["editExpenseSaveButton"].exists,
+            "A completed job's costs should not offer a Save"
+        )
+        app.buttons["editExpenseCancelButton"].tap()
+
+        // On an active job the same row opens for editing.
+        app.navigationBars.buttons.firstMatch.tap()
+        app.segmentedControls.buttons["Active"].tap()
+        let activeJob = app.staticTexts["Backyard fence"].firstMatch
+        XCTAssertTrue(activeJob.waitForExistence(timeout: 3))
+        activeJob.tap()
+
+        app.buttons["addExpenseButton"].tap()
+        let amount = app.textFields["Amount"].firstMatch
+        XCTAssertTrue(amount.waitForExistence(timeout: 3))
+        amount.tap()
+        amount.typeText("240")
+        dismissKeyboard(in: app)
+        app.buttons["Save"].firstMatch.tap()
+
+        let newRow = app.buttons["expenseRowButton"].firstMatch
+        XCTAssertTrue(scrollToElement(newRow, in: app), "The new expense never appeared")
+        newRow.tap()
+
+        XCTAssertTrue(app.navigationBars["Edit Expense"].waitForExistence(timeout: 3))
+        let editAmount = app.textFields["editExpenseAmountField"]
+        XCTAssertTrue(editAmount.exists)
+        XCTAssertFalse(
+            (editAmount.value as? String ?? "").isEmpty,
+            "The form should open on the amount already recorded"
+        )
+        XCTAssertFalse(
+            app.buttons["editExpenseSaveButton"].isEnabled,
+            "Save should stay inert until an actual change is made"
+        )
+
+        replaceText(in: editAmount, with: "265", in: app)
+        dismissKeyboard(in: app)
+
+        let save = app.buttons["editExpenseSaveButton"]
+        XCTAssertTrue(waitUntilHittable(save, timeout: 3))
+        XCTAssertTrue(save.isEnabled, "A real change should enable Save")
+        save.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Backyard fence"].waitForExistence(timeout: 5),
+            "Saving should return to the job"
+        )
+    }
+
+    /// Completing a job was a one-way door: a job finished by mistake could
+    /// only be undone by deleting it and re-entering every cost.
+    @MainActor
+    func testACompletedJobCanBeReopened() throws {
+        let app = launchUsedInstall()
+
+        app.tabBars.buttons["History"].tap()
+        app.segmentedControls.buttons["Completed"].tap()
+        let completedJob = app.staticTexts["Kitchen remodel"]
+        XCTAssertTrue(completedJob.waitForExistence(timeout: 3))
+        completedJob.tap()
+
+        XCTAssertTrue(app.staticTexts["Final results"].waitForExistence(timeout: 3))
+
+        app.buttons["jobOptionsMenu"].tap()
+        let reopen = app.buttons["reopenJobButton"]
+        XCTAssertTrue(reopen.waitForExistence(timeout: 3), "A completed job should offer Reopen")
+        reopen.tap()
+
+        let confirm = app.buttons["confirmReopenJobButton"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 3), "Reopening should ask first")
+        confirm.tap()
+
+        // The frozen result gives way to the live view of a running job.
+        XCTAssertTrue(
+            app.staticTexts["Job health"].waitForExistence(timeout: 5),
+            "A reopened job should read as active again"
+        )
+        XCTAssertFalse(app.staticTexts["Final results"].exists)
+        XCTAssertTrue(app.buttons["addExpenseButton"].exists, "Costs should be loggable again")
     }
 
     // MARK: - First run
@@ -411,6 +637,19 @@ final class MarginRunUITests: XCTestCase {
 
     // MARK: - Paywall
 
+    @MainActor
+    func testSettingsShowsOfferCodeRedemptionAction() throws {
+        let app = launchUsedInstall()
+
+        app.tabBars.buttons["Settings"].tap()
+
+        let redeem = app.buttons["settingsRedeemOfferCodeButton"]
+        XCTAssertTrue(
+            scrollToElement(redeem, in: app),
+            "Subscription settings should always expose App Store offer-code redemption"
+        )
+    }
+
     /// A free account reaching Insights must be offered the contextual paywall
     /// rather than the Pro screen.
     ///
@@ -483,6 +722,25 @@ final class MarginRunUITests: XCTestCase {
         XCTAssertTrue(purchase.isHittable, "The CTA must be visible without scrolling")
     }
 
+    /// Eligible customers should understand the trial before tapping purchase,
+    /// without relying on the CTA alone to explain the offer.
+    @MainActor
+    func testEligibleAnnualPlanExplainsTheFreeTrial() throws {
+        let app = launchUsedInstall()
+
+        openInsightsPaywall(in: app)
+
+        let trialMessage = app.descendants(matching: .any)["paywallTrialMessage"]
+        XCTAssertTrue(
+            trialMessage.waitForExistence(timeout: 10),
+            "The eligible yearly plan should explain its free trial at the decision point"
+        )
+        XCTAssertTrue(
+            trialMessage.label.contains("Try every Pro feature free for 7 days")
+        )
+        XCTAssertTrue(trialMessage.label.contains("Then $99.99/year. Cancel anytime."))
+    }
+
     /// Annual leads and is preselected, and choosing monthly actually moves the
     /// selection rather than only redrawing.
     @MainActor
@@ -515,6 +773,7 @@ final class MarginRunUITests: XCTestCase {
         XCTAssertTrue(app.buttons["paywallPurchaseButton"].waitForExistence(timeout: 10))
 
         XCTAssertTrue(app.buttons["paywallRestoreButton"].exists)
+        XCTAssertTrue(app.buttons["paywallRedeemOfferCodeButton"].exists)
         // `Link` surfaces as a button on iOS, so query the whole tree rather
         // than guessing the element type.
         XCTAssertTrue(app.descendants(matching: .any)["paywallTermsLink"].exists)
@@ -542,6 +801,7 @@ final class MarginRunUITests: XCTestCase {
             app.buttons["planMonthly"],
             app.buttons["paywallPurchaseButton"],
             app.buttons["paywallRestoreButton"],
+            app.buttons["paywallRedeemOfferCodeButton"],
             app.descendants(matching: .any)["paywallPrivacyLink"],
             app.descendants(matching: .any)["paywallTermsLink"],
         ]
@@ -585,6 +845,45 @@ final class MarginRunUITests: XCTestCase {
         let unlock = app.buttons["unlockProButton"]
         XCTAssertTrue(unlock.waitForExistence(timeout: 5), file: file, line: line)
         unlock.tap()
+    }
+
+    /// Replaces a text field's contents rather than appending to them.
+    ///
+    /// MarginRun's money fields swap between a formatted display value and a
+    /// plain editing one when focus changes, so the text to erase is whatever
+    /// is there *after* the tap, not before it.
+    @MainActor
+    private func replaceText(
+        in field: XCUIElement,
+        with text: String,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            scrollToElement(field, in: app),
+            "The field never became tappable",
+            file: file,
+            line: line
+        )
+        field.tap()
+        // Focusing a money field swaps its display text for the editing one, so
+        // the caret is placed after that settles rather than before it.
+        _ = waitUntilHittable(field, timeout: 1)
+
+        // Tapping past the end of the text, not on the field as a whole: on a
+        // trailing-aligned field a plain tap lands the caret at position zero,
+        // where backspace deletes nothing and the new text is prepended to the
+        // old — which reads as a passing edit right up until the assertion.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
+
+        let existing = field.value as? String ?? ""
+        if !existing.isEmpty {
+            field.typeText(
+                String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count)
+            )
+        }
+        field.typeText(text)
     }
 
     /// Scrolls `app` until `element` is on screen and can actually be tapped.

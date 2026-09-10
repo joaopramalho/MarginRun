@@ -9,6 +9,7 @@ struct StartTimerJobPickerView: View {
 
     @State private var searchText = ""
     @State private var errorMessage: String?
+    @State private var isCreatingJob = false
 
     private var activeJobs: [Job] {
         jobs.filter { job in
@@ -40,7 +41,15 @@ struct StartTimerJobPickerView: View {
                 ContentUnavailableView {
                     Label("No active jobs", systemImage: "hammer")
                 } description: {
-                    Text("Create a job before starting a labor timer.")
+                    Text("A timer records labor against a job, so there has to be one to record it against.")
+                } actions: {
+                    // No entitlement check: this screen is only reachable once
+                    // the labor timer's Pro gate has been passed, and Pro has
+                    // no active-job limit to meet.
+                    Button("Create Job") {
+                        isCreatingJob = true
+                    }
+                    .accessibilityIdentifier("timerPickerCreateJobButton")
                 }
             }
         }
@@ -59,6 +68,9 @@ struct StartTimerJobPickerView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .background(.bar)
+        }
+        .sheet(isPresented: $isCreatingJob) {
+            CreateJobView(source: .timerPickerEmptyState)
         }
         .alert(
             "Couldn’t start timer",

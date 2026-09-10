@@ -120,12 +120,18 @@ nonisolated enum MarginAlertEngine {
         return results
     }
 
-    private static func decimalText(_ value: Decimal) -> String {
+    /// Locale-aware for the same reason ``MoneyFormat/percent(ratio:locale:)``
+    /// is: an alert reads `"Materials are 12% over budget"` right beside an
+    /// amount that already follows the device.
+    private static func decimalText(
+        _ value: Decimal,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.minimumFractionDigits = 0
         formatter.maximumFractionDigits = 1
-        formatter.locale = Locale(identifier: "en_US")
+        formatter.locale = locale
         return formatter.string(from: value as NSDecimalNumber) ?? "0"
     }
 

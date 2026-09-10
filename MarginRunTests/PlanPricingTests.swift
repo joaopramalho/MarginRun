@@ -1,4 +1,5 @@
 import Foundation
+import RevenueCat
 import Testing
 @testable import MarginRun
 
@@ -50,6 +51,52 @@ struct PlanPricingTests {
     @Test func identicalPricesProduceNoBadge() {
         let price = Decimal(string: "9.99")!
         #expect(PlanPricing.savingsPercent(monthlyEquivalent: price, monthlyReference: price) == nil)
+    }
+}
+
+@MainActor
+struct TrialOfferTests {
+    @Test func eligibleYearlyPlanShowsStoreKitSevenDayTrialAndRenewalPrice() throws {
+        let offering = PaywallFixture.offering()
+        let yearly = try #require(offering.annual)
+        let options = PlanOption.options(
+            from: offering,
+            introEligibilityByProductID: [yearly.storeProduct.productIdentifier: .eligible]
+        )
+        let plan = try #require(options.first(where: { $0.analyticsPlan == .yearly }))
+
+        #expect(plan.trial?.duration == "7 days")
+        #expect(plan.trial?.renewalLine == "Then $99.99/year")
+        #expect(plan.trial?.reassuranceHeadline == "Try every Pro feature free for 7 days")
+        #expect(plan.trial?.reassuranceDetail == "Then $99.99/year. Cancel anytime.")
+        #expect(plan.terms.contains("7 days free, then $99.99/year"))
+    }
+
+    @Test(arguments: [IntroEligibilityStatus.ineligible, .unknown])
+    func ineligibleOrUnknownCustomerSeesNoTrial(status: IntroEligibilityStatus) throws {
+        let offering = PaywallFixture.offering()
+        let yearly = try #require(offering.annual)
+        let options = PlanOption.options(
+            from: offering,
+            introEligibilityByProductID: [yearly.storeProduct.productIdentifier: status]
+        )
+        let plan = try #require(options.first(where: { $0.analyticsPlan == .yearly }))
+
+        #expect(plan.trial == nil)
+        #expect(plan.terms == "Renews yearly until cancelled.")
+    }
+
+    @Test func monthlyNeverAdvertisesATrial() throws {
+        let offering = PaywallFixture.offering()
+        let monthly = try #require(offering.monthly)
+        let options = PlanOption.options(
+            from: offering,
+            introEligibilityByProductID: [monthly.storeProduct.productIdentifier: .eligible]
+        )
+        let plan = try #require(options.first(where: { $0.analyticsPlan == .monthly }))
+
+        #expect(plan.trial == nil)
+        #expect(plan.terms == "Renews monthly until cancelled.")
     }
 }
 

@@ -15,6 +15,9 @@ nonisolated struct PlanOption: Identifiable, Equatable {
     let periodSuffix: String?
     /// The anchor that makes an annual price legible, e.g. `"$9.99/mo billed yearly"`.
     let equivalentLine: String?
+    /// StoreKit-backed free-trial copy, present only when RevenueCat reports
+    /// both an introductory free trial and current-user eligibility.
+    let trial: TrialOfferDisplay?
     /// e.g. `"BEST VALUE · SAVE 33%"`. Only the recommended plan carries one,
     /// and the percentage is always computed from the two live prices.
     let badge: String?
@@ -28,6 +31,16 @@ nonisolated struct PlanOption: Identifiable, Equatable {
     let analyticsPlan: AnalyticsPlan
 
     var id: String { packageIdentifier }
+}
+
+/// Display information derived from an eligible StoreKit introductory offer.
+nonisolated struct TrialOfferDisplay: Equatable, Sendable {
+    let duration: String
+    let renewalLine: String
+
+    var summary: String { "\(duration) free" }
+    var reassuranceHeadline: String { "Try every Pro feature free for \(duration)" }
+    var reassuranceDetail: String { "\(renewalLine). Cancel anytime." }
 }
 
 /// Pricing arithmetic for the paywall.
@@ -78,7 +91,10 @@ extension PlanOption {
     ///
     /// Returns an empty array when the offering carries nothing purchasable, so
     /// the paywall can show its unavailable state instead of an empty picker.
-    static func options(from offering: Offering) -> [PlanOption] {
+    static func options(
+        from offering: Offering,
+        introEligibilityByProductID: [String: IntroEligibilityStatus] = [:]
+    ) -> [PlanOption] {
         let monthlyReference = offering.monthly?.storeProduct.price
         var options: [PlanOption] = []
 
@@ -90,6 +106,11 @@ extension PlanOption {
                     PlanPricing.savingsPercent(monthlyEquivalent: perMonth, monthlyReference: $0)
                 }
             }
+            let trial = eligibleFreeTrial(
+                for: annual,
+                plan: .yearly,
+                eligibility: introEligibilityByProductID[annual.storeProduct.productIdentifier]
+            )
 
             options.append(
                 PlanOption(
@@ -100,8 +121,11 @@ extension PlanOption {
                     equivalentLine: annual.storeProduct.localizedPricePerMonth.map {
                         "\($0)/mo billed yearly"
                     },
+                    trial: trial,
                     badge: PlanPricing.recommendedBadge(savingsPercent: savings),
-                    terms: "Renews yearly until cancelled.",
+                    terms: trial.map {
+                        "\($0.summary), then \(annual.localizedPriceString)/year. Renews yearly until cancelled."
+                    } ?? "Renews yearly until cancelled.",
                     accessibilityIdentifier: "planYearly",
                     analyticsPlan: .yearly
                 )
@@ -116,6 +140,10 @@ extension PlanOption {
                     price: monthly.localizedPriceString,
                     periodSuffix: "/month",
                     equivalentLine: nil,
+                    // Monthly never advertises a trial. The product must remain
+                    // trial-free in App Store Connect as well; this protects the
+                    // native copy if a dashboard product is misconfigured.
+                    trial: nil,
                     badge: nil,
                     terms: "Renews monthly until cancelled.",
                     accessibilityIdentifier: "planMonthly",
@@ -141,6 +169,7 @@ extension PlanOption {
                     price: package.localizedPriceString,
                     periodSuffix: nil,
                     equivalentLine: nil,
+                    trial: nil,
                     badge: nil,
                     terms: "",
                     accessibilityIdentifier: "plan_\(package.identifier)",
@@ -150,5 +179,47 @@ extension PlanOption {
         }
 
         return options
+    }
+
+    /// A trial is shown only when all authoritative facts agree: Yearly is the
+    /// selected plan, StoreKit exposes a free-trial introductory discount, and
+    /// RevenueCat says this customer is eligible. Unknown is deliberately
+    /// treated as ineligible so the paywall never makes a promise it cannot keep.
+    static func eligibleFreeTrial(
+        for package: Package,
+        plan: AnalyticsPlan,
+        eligibility: IntroEligibilityStatus?
+    ) -> TrialOfferDisplay? {
+        guard plan == .yearly,
+              eligibility == .eligible,
+              let discount = package.storeProduct.introductoryDiscount,
+              discount.paymentMode == .freeTrial else { return nil }
+
+        return TrialOfferDisplay(
+            duration: trialDuration(discount),
+            renewalLine: "Then \(package.localizedPriceString)/year"
+        )
+    }
+
+    private static func trialDuration(_ discount: StoreProductDiscount) -> String {
+        let count = discount.subscriptionPeriod.value * discount.numberOfPeriods
+        switch discount.subscriptionPeriod.unit {
+        case .day:
+            return unitText(count, singular: "day")
+        case .week:
+            // A one-week App Store trial is the requested seven-day offer. Use
+            // the product period as the source, not a locally timed countdown.
+            return count == 1 ? "7 days" : unitText(count, singular: "week")
+        case .month:
+            return unitText(count, singular: "month")
+        case .year:
+            return unitText(count, singular: "year")
+        @unknown default:
+            return "Introductory period"
+        }
+    }
+
+    private static func unitText(_ count: Int, singular: String) -> String {
+        "\(count) \(count == 1 ? singular : singular + "s")"
     }
 }

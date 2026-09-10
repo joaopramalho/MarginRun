@@ -777,7 +777,7 @@
 				0D1B78AB30465D7F00D3AA39 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		0D1B78AC30465D7F00D3AA39 /* Build configuration list for PBXNativeTarget "MarginRun" */ = {
 			isa = XCConfigurationList;
@@ -786,7 +786,7 @@
 				0D1B78AE30465D7F00D3AA39 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		0D1B78AF30465D7F00D3AA39 /* Build configuration list for PBXNativeTarget "MarginRunTests" */ = {
 			isa = XCConfigurationList;
@@ -795,7 +795,7 @@
 				0D1B78B130465D7F00D3AA39 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		0D1B78B230465D7F00D3AA39 /* Build configuration list for PBXNativeTarget "MarginRunUITests" */ = {
 			isa = XCConfigurationList;
@@ -804,7 +804,7 @@
 				0D1B78B430465D7F00D3AA39 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		B10000070000000000000001 /* Build configuration list for PBXNativeTarget "MarginRunWidgets" */ = {
 			isa = XCConfigurationList;
@@ -813,7 +813,7 @@
 				B10000090000000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 

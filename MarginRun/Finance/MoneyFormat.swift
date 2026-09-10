@@ -50,13 +50,17 @@ nonisolated enum MoneyFormat {
     }
 
     /// Formats a ratio such as `0.361` as `"36.1%"`.
-    static func percent(ratio: Decimal?) -> String {
+    ///
+    /// Follows the device the way ``usd(_:)`` does. These two sit side by side
+    /// on nearly every screen, so pinning one to a dot while the other takes
+    /// the locale's comma puts `R$ 1.234,56` next to `36.1%` in the same row.
+    static func percent(ratio: Decimal?, locale: Locale = .autoupdatingCurrent) -> String {
         guard let ratio else { return "—" }
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.minimumFractionDigits = 1
         formatter.maximumFractionDigits = 1
-        formatter.locale = Locale(identifier: "en_US")
+        formatter.locale = locale
         let formatted = formatter.string(from: (ratio * 100) as NSDecimalNumber) ?? "—"
         return "\(formatted)%"
     }

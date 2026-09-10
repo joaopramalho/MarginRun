@@ -60,6 +60,11 @@ struct MarginAlertEngineTests {
 
         #expect(alerts.count == 1)
         #expect(alerts.first?.kind == .categoryNearLimit)
-        #expect(alerts.first?.message == "Labor has used 90.0% of its budget")
+        // The percentage is rendered in the device's locale, so the expectation
+        // is built the same way rather than pinning a decimal separator here.
+        // What this asserts is the sentence: the category, the verb agreement,
+        // and the figure it reports.
+        let ninetyPercent = MoneyFormat.percent(ratio: Decimal(string: "0.9")!)
+        #expect(alerts.first?.message == "Labor has used \(ninetyPercent) of its budget")
     }
 }

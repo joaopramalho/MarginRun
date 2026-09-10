@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import RevenueCat
+import StoreKit
 
 /// Observable façade over the RevenueCat SDK.
 ///
@@ -20,7 +21,15 @@ final class SubscriptionStore: ObservableObject {
         let entitlementActive: Bool
     }
 
+    /// Test seam matching the authoritative result of RevenueCat's
+    /// `syncPurchases()`. Production still receives the real `CustomerInfo`.
+    struct OfferCodeSyncResult {
+        let customerInfo: CustomerInfo?
+        let entitlementActive: Bool
+    }
+
     typealias PurchaseHandler = (Package) async throws -> PurchaseExecutionResult
+    typealias OfferCodeSyncHandler = () async throws -> OfferCodeSyncResult
 
     /// What the paywall should render for the current offering.
     enum OfferingState {
@@ -31,6 +40,7 @@ final class SubscriptionStore: ObservableObject {
 
     @Published private(set) var customerInfo: CustomerInfo?
     @Published private(set) var offeringState: OfferingState = .loading
+    @Published private(set) var introEligibilityByProductID: [String: IntroEligibilityStatus] = [:]
     @Published private(set) var isPurchasing = false
     @Published private(set) var isRestoring = false
 
@@ -53,17 +63,21 @@ final class SubscriptionStore: ObservableObject {
     /// Reports purchase and restore outcomes. Optional so previews, tests and
     /// the gating unit tests can construct a store with no reporting at all.
     private let analytics: AnalyticsService?
+    private let offerCodeSyncHandler: OfferCodeSyncHandler?
     private let purchaseHandler: PurchaseHandler?
 
     private var customerInfoObserver: Task<Void, Never>?
+    private var offerCodeEntitlementSnapshot: OfferCodeEntitlementSnapshot?
 
     init(
         entitlementOverride: Bool? = nil,
         analytics: AnalyticsService? = nil,
+        offerCodeSyncHandler: OfferCodeSyncHandler? = nil,
         purchaseHandler: PurchaseHandler? = nil
     ) {
         self.entitlementOverride = entitlementOverride
         self.analytics = analytics
+        self.offerCodeSyncHandler = offerCodeSyncHandler
         self.purchaseHandler = purchaseHandler
 
         guard entitlementOverride == nil, Purchases.isConfigured else { return }
@@ -161,21 +175,136 @@ final class SubscriptionStore: ObservableObject {
         }
     }
 
+    // MARK: - Offer codes
+
+    /// Records the tap and snapshots the current entitlement so a plain sheet
+    /// dismissal cannot be mistaken for a redeemed code.
+    func offerCodeRedemptionOpened(from source: OfferCodeRedemptionSource) {
+        offerCodeEntitlementSnapshot = currentOfferCodeEntitlementSnapshot
+        analytics?.track(.offerCodeRedemptionOpened(source: source))
+    }
+
+    /// Handles the completion from Apple's official redemption sheet.
+    ///
+    /// The SwiftUI API in the project's current SDK reports whether presentation
+    /// completed, while RevenueCat remains authoritative about access. A
+    /// successful presentation therefore syncs StoreKit transactions into
+    /// RevenueCat and only reports success after an active, changed entitlement
+    /// is confirmed. Dismissing the sheet without redeeming changes nothing and
+    /// stays silent.
+    func offerCodeRedemptionFinished(
+        _ result: Result<Void, Error>,
+        from source: OfferCodeRedemptionSource
+    ) async {
+        switch result {
+        case .failure(let error):
+            offerCodeEntitlementSnapshot = nil
+            guard !Self.isOfferCodeCancellation(error) else { return }
+            reportOfferCodeFailure(error, from: source, occurredDuringSync: false)
+
+        case .success:
+            await syncOfferCodeRedemption(from: source)
+        }
+    }
+
+    private func syncOfferCodeRedemption(from source: OfferCodeRedemptionSource) async {
+        guard offerCodeSyncHandler != nil || isSDKAvailable else {
+            offerCodeEntitlementSnapshot = nil
+            return
+        }
+
+        let before = offerCodeEntitlementSnapshot
+        defer { offerCodeEntitlementSnapshot = nil }
+
+        do {
+            let syncResult: OfferCodeSyncResult
+            if let offerCodeSyncHandler {
+                syncResult = try await offerCodeSyncHandler()
+            } else {
+                let info = try await Purchases.shared.syncPurchases()
+                syncResult = OfferCodeSyncResult(
+                    customerInfo: info,
+                    entitlementActive: info.entitlements[RevenueCatConfig.proEntitlementID]?.isActive == true
+                )
+            }
+
+            if let updatedCustomerInfo = syncResult.customerInfo {
+                customerInfo = updatedCustomerInfo
+            }
+
+            let after = currentOfferCodeEntitlementSnapshot
+            let entitlementChanged = before != after
+                || before?.isActive != syncResult.entitlementActive
+            guard syncResult.entitlementActive, entitlementChanged else {
+                // The old SwiftUI completion also runs when the system sheet is
+                // simply dismissed. No changed entitlement means cancellation
+                // or no redemption, neither of which should show an error.
+                return
+            }
+
+            analytics?.track(.offerCodeRedemptionSucceeded(source: source))
+        } catch {
+            reportOfferCodeFailure(error, from: source, occurredDuringSync: true)
+        }
+    }
+
+    private func reportOfferCodeFailure(
+        _ error: Error,
+        from source: OfferCodeRedemptionSource,
+        occurredDuringSync: Bool
+    ) {
+        let reason = Self.offerCodeFailureReason(
+            for: error,
+            occurredDuringSync: occurredDuringSync
+        )
+        errorMessage = Self.offerCodeMessage(for: reason)
+        analytics?.track(.offerCodeRedemptionFailed(source: source, reason: reason))
+    }
+
     // MARK: - Offerings
 
     /// Loads the current offering: the packages the dashboard is serving to this
     /// specific user, including whatever an active experiment assigns them.
     func loadOffering() async {
-        guard isSDKAvailable else {
+        _ = await loadCurrentOffering()
+    }
+
+    /// Resolves the remote paywall choice from the same Offering used by the
+    /// native paywall. Called for every presentation so RevenueCat's normal
+    /// cache/refresh policy can pick up metadata changes without an app release.
+    func resolvePaywallRoute() async -> PaywallRoute {
+        guard let offering = await loadCurrentOffering() else { return .native }
+        let remoteValue: String? = offering.getMetadataValue(for: PaywallMode.metadataKey)
+        let mode = PaywallMode.resolve(
+            metadataValue: remoteValue,
+            revenueCatPaywallAvailable: offering.hasPaywall
+        )
+        return mode == .revenueCat ? .revenueCat(offering) : .native
+    }
+
+    /// Fetches and publishes one current Offering for both routing and native
+    /// rendering, avoiding a second Offerings request after the route resolves.
+    private func loadCurrentOffering() async -> Offering? {
+        guard entitlementOverride == nil, Purchases.isConfigured else {
             // Previews and UI tests pin the entitlement and never configure the
             // SDK. Serving them a fixed offering is what makes the paywall's
             // layout renderable and assertable at all — without it the screen
             // could only ever show its unavailable state. A shipped launch
             // never takes this branch, because it has no pinned entitlement.
-            offeringState = entitlementOverride == nil
-                ? .unavailable("Purchases aren't available in this build.")
-                : .loaded(PaywallFixture.offering())
-            return
+            guard entitlementOverride != nil else {
+                offeringState = .unavailable("Purchases aren't available in this build.")
+                introEligibilityByProductID = [:]
+                return nil
+            }
+
+            let fixture = PaywallFixture.offering()
+            offeringState = .loaded(fixture)
+            introEligibilityByProductID = fixture.availablePackages.reduce(into: [:]) {
+                if $1.storeProduct.introductoryDiscount != nil {
+                    $0[$1.storeProduct.productIdentifier] = .eligible
+                }
+            }
+            return fixture
         }
 
         offeringState = .loading
@@ -187,20 +316,43 @@ final class SubscriptionStore: ObservableObject {
                 offeringState = .unavailable(
                     "No current offering is configured. Set one in RevenueCat → Offerings."
                 )
-                return
+                introEligibilityByProductID = [:]
+                return nil
             }
 
             guard !current.availablePackages.isEmpty else {
                 offeringState = .unavailable(
                     "The current offering has no packages attached."
                 )
-                return
+                introEligibilityByProductID = [:]
+                return nil
             }
 
             offeringState = .loaded(current)
+            await loadIntroEligibility(for: current)
+            return current
         } catch {
             offeringState = .unavailable(Self.message(for: error))
+            introEligibilityByProductID = [:]
+            return nil
         }
+    }
+
+    private func loadIntroEligibility(for offering: Offering) async {
+        let productIDs = offering.availablePackages.compactMap { package in
+            package.storeProduct.introductoryDiscount == nil
+                ? nil
+                : package.storeProduct.productIdentifier
+        }
+        guard !productIDs.isEmpty else {
+            introEligibilityByProductID = [:]
+            return
+        }
+
+        let eligibility = await Purchases.shared.checkTrialOrIntroDiscountEligibility(
+            productIdentifiers: productIDs
+        )
+        introEligibilityByProductID = eligibility.mapValues(\.status)
     }
 
     // MARK: - Purchasing
@@ -223,7 +375,9 @@ final class SubscriptionStore: ObservableObject {
     func purchase(
         _ package: Package,
         plan: AnalyticsPlan = .other,
-        feature: ProFeature? = nil
+        feature: ProFeature? = nil,
+        paywallSource: PaywallSource = .native,
+        purchaseKind: AnalyticsPurchaseKind = .paid
     ) async -> Bool {
         // Also the duplicate-tap guard: a second call while one is in flight
         // returns without starting anything or emitting a second event.
@@ -231,7 +385,12 @@ final class SubscriptionStore: ObservableObject {
 
         isPurchasing = true
         defer { isPurchasing = false }
-        analytics?.track(.purchaseStarted(plan: plan, feature: feature))
+        analytics?.track(.purchaseStarted(
+            plan: plan,
+            feature: feature,
+            source: paywallSource,
+            kind: purchaseKind
+        ))
 
         do {
             let result: PurchaseExecutionResult
@@ -250,7 +409,12 @@ final class SubscriptionStore: ObservableObject {
             // Cancelling is a normal outcome, not an error. Alerting on it is the
             // classic way to annoy someone who just deliberately tapped "Cancel".
             guard !result.userCancelled else {
-                analytics?.track(.purchaseCancelled(plan: plan, feature: feature))
+                analytics?.track(.purchaseCancelled(
+                    plan: plan,
+                    feature: feature,
+                    source: paywallSource,
+                    kind: purchaseKind
+                ))
                 return false
             }
 
@@ -263,21 +427,50 @@ final class SubscriptionStore: ObservableObject {
                 // entitlement. Counting this as a conversion would inflate the
                 // funnel against revenue that does not exist.
                 analytics?.track(
-                    .purchaseFailed(plan: plan, feature: feature, reason: .entitlementNotActive)
+                    .purchaseFailed(
+                        plan: plan,
+                        feature: feature,
+                        source: paywallSource,
+                        kind: purchaseKind,
+                        reason: .entitlementNotActive
+                    )
                 )
                 return false
             }
 
-            analytics?.track(.purchaseCompleted(plan: plan, feature: feature))
+            let completedKind = Self.completedPurchaseKind(
+                customerInfo: result.customerInfo,
+                fallback: purchaseKind
+            )
+            if completedKind == .introductoryTrial {
+                analytics?.track(.trialStarted(plan: plan, feature: feature, source: paywallSource))
+            }
+            analytics?.track(.purchaseCompleted(
+                plan: plan,
+                feature: feature,
+                source: paywallSource,
+                kind: completedKind
+            ))
             return true
         } catch {
             if Self.isCancellation(error) {
-                analytics?.track(.purchaseCancelled(plan: plan, feature: feature))
+                analytics?.track(.purchaseCancelled(
+                    plan: plan,
+                    feature: feature,
+                    source: paywallSource,
+                    kind: purchaseKind
+                ))
                 return false
             }
             errorMessage = Self.message(for: error)
             analytics?.track(
-                .purchaseFailed(plan: plan, feature: feature, reason: Self.failureReason(for: error))
+                .purchaseFailed(
+                    plan: plan,
+                    feature: feature,
+                    source: paywallSource,
+                    kind: purchaseKind,
+                    reason: Self.failureReason(for: error)
+                )
             )
             return false
         }
@@ -288,12 +481,15 @@ final class SubscriptionStore: ObservableObject {
     /// Apple requires a visible restore control anywhere a subscription is sold,
     /// which is why this is wired to an explicit button rather than run on launch.
     @discardableResult
-    func restorePurchases(from source: RestoreSource = .settings) async -> Bool {
+    func restorePurchases(
+        from source: RestoreSource = .settings,
+        paywallSource: PaywallSource? = nil
+    ) async -> Bool {
         guard isSDKAvailable, !isRestoring else { return false }
 
         isRestoring = true
         defer { isRestoring = false }
-        analytics?.track(.restoreStarted(source: source))
+        analytics?.track(.restoreStarted(source: source, paywallSource: paywallSource))
 
         do {
             customerInfo = try await Purchases.shared.restorePurchases()
@@ -306,15 +502,130 @@ final class SubscriptionStore: ObservableObject {
             analytics?.track(
                 .restoreCompleted(
                     source: source,
+                    paywallSource: paywallSource,
                     outcome: isPro ? .entitlementRestored : .nothingToRestore
                 )
             )
             return isPro
         } catch {
             errorMessage = Self.message(for: error)
-            analytics?.track(.restoreCompleted(source: source, outcome: .failed))
+            analytics?.track(.restoreCompleted(
+                source: source,
+                paywallSource: paywallSource,
+                outcome: .failed
+            ))
             return false
         }
+    }
+
+    // MARK: - RevenueCatUI callbacks
+
+    func revenueCatPaywallPurchaseStarted(package: Package, feature: ProFeature?) {
+        let context = purchaseAnalyticsContext(for: package)
+        analytics?.track(.purchaseStarted(
+            plan: context.plan,
+            feature: feature,
+            source: .revenueCat,
+            kind: context.kind
+        ))
+    }
+
+    func revenueCatPaywallPurchaseCompleted(
+        package: Package?,
+        customerInfo: CustomerInfo,
+        feature: ProFeature?
+    ) {
+        self.customerInfo = customerInfo
+        let context = package.map(purchaseAnalyticsContext(for:)) ?? (.other, .paid)
+
+        guard isPro else {
+            analytics?.track(.purchaseFailed(
+                plan: context.plan,
+                feature: feature,
+                source: .revenueCat,
+                kind: context.kind,
+                reason: .entitlementNotActive
+            ))
+            return
+        }
+
+        let completedKind = Self.completedPurchaseKind(
+            customerInfo: customerInfo,
+            fallback: context.kind
+        )
+        if completedKind == .introductoryTrial {
+            analytics?.track(.trialStarted(plan: context.plan, feature: feature, source: .revenueCat))
+        }
+        analytics?.track(.purchaseCompleted(
+            plan: context.plan,
+            feature: feature,
+            source: .revenueCat,
+            kind: completedKind
+        ))
+    }
+
+    func revenueCatPaywallPurchaseCancelled(package: Package?, feature: ProFeature?) {
+        let context = package.map(purchaseAnalyticsContext(for:)) ?? (.other, .paid)
+        analytics?.track(.purchaseCancelled(
+            plan: context.plan,
+            feature: feature,
+            source: .revenueCat,
+            kind: context.kind
+        ))
+    }
+
+    func revenueCatPaywallPurchaseFailed(
+        package: Package?,
+        feature: ProFeature?,
+        error: Error
+    ) {
+        let context = package.map(purchaseAnalyticsContext(for:)) ?? (.other, .paid)
+        errorMessage = Self.message(for: error)
+        analytics?.track(.purchaseFailed(
+            plan: context.plan,
+            feature: feature,
+            source: .revenueCat,
+            kind: context.kind,
+            reason: Self.failureReason(for: error)
+        ))
+    }
+
+    func revenueCatPaywallRestoreStarted() {
+        analytics?.track(.restoreStarted(source: .paywall, paywallSource: .revenueCat))
+    }
+
+    func revenueCatPaywallRestoreCompleted(customerInfo: CustomerInfo) {
+        self.customerInfo = customerInfo
+        analytics?.track(.restoreCompleted(
+            source: .paywall,
+            paywallSource: .revenueCat,
+            outcome: isPro ? .entitlementRestored : .nothingToRestore
+        ))
+    }
+
+    func revenueCatPaywallRestoreFailed(error: Error) {
+        errorMessage = Self.message(for: error)
+        analytics?.track(.restoreCompleted(
+            source: .paywall,
+            paywallSource: .revenueCat,
+            outcome: .failed
+        ))
+    }
+
+    private func purchaseAnalyticsContext(
+        for package: Package
+    ) -> (plan: AnalyticsPlan, kind: AnalyticsPurchaseKind) {
+        let plan: AnalyticsPlan = switch package.packageType {
+        case .annual: .yearly
+        case .monthly: .monthly
+        default: .other
+        }
+        let hasEligibleTrial = PlanOption.eligibleFreeTrial(
+            for: package,
+            plan: plan,
+            eligibility: introEligibilityByProductID[package.storeProduct.productIdentifier]
+        ) != nil
+        return (plan, hasEligibleTrial ? .introductoryTrial : .paid)
     }
 
     // MARK: - Errors
@@ -385,5 +696,97 @@ final class SubscriptionStore: ObservableObject {
         let nsError = error as NSError
         return nsError.domain == ErrorCode.errorDomain
             && ErrorCode(rawValue: nsError.code) == .purchaseCancelledError
+    }
+
+    private struct OfferCodeEntitlementSnapshot: Equatable {
+        let isActive: Bool
+        let productIdentifier: String?
+        let latestPurchaseDate: Date?
+        let expirationDate: Date?
+    }
+
+    private var currentOfferCodeEntitlementSnapshot: OfferCodeEntitlementSnapshot {
+        let entitlement = proEntitlement
+        return OfferCodeEntitlementSnapshot(
+            isActive: isPro,
+            productIdentifier: entitlement?.productIdentifier,
+            latestPurchaseDate: entitlement?.latestPurchaseDate,
+            expirationDate: entitlement?.expirationDate
+        )
+    }
+
+    static func isOfferCodeCancellation(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        guard nsError.domain == SKErrorDomain else { return false }
+        return nsError.code == SKError.Code.paymentCancelled.rawValue
+            || nsError.code == SKError.Code.overlayCancelled.rawValue
+    }
+
+    static func offerCodeFailureReason(
+        for error: Error,
+        occurredDuringSync: Bool
+    ) -> OfferCodeRedemptionFailureReason {
+        let nsError = error as NSError
+
+        if nsError.domain == NSURLErrorDomain {
+            return .network
+        }
+
+        if nsError.domain == ErrorCode.errorDomain {
+            switch failureReason(for: error) {
+            case .network: return .network
+            case .notAllowed: return .notAllowed
+            case .productUnavailable: return .storeUnavailable
+            case .configuration: return .syncFailed
+            default: return occurredDuringSync ? .syncFailed : .unknown
+            }
+        }
+
+        guard nsError.domain == SKErrorDomain,
+              let code = SKError.Code(rawValue: nsError.code) else {
+            return occurredDuringSync ? .syncFailed : .unknown
+        }
+
+        switch code {
+        case .cloudServiceNetworkConnectionFailed:
+            return .network
+        case .clientInvalid, .paymentNotAllowed, .privacyAcknowledgementRequired:
+            return .notAllowed
+        case .invalidOfferIdentifier, .invalidOfferPrice, .ineligibleForOffer,
+             .paymentInvalid, .missingOfferParams, .invalidSignature:
+            return .invalidOrIneligible
+        case .storeProductNotAvailable, .unsupportedPlatform,
+             .overlayInvalidConfiguration, .overlayPresentedInBackgroundScene:
+            return .storeUnavailable
+        default:
+            return occurredDuringSync ? .syncFailed : .unknown
+        }
+    }
+
+    private static func offerCodeMessage(
+        for reason: OfferCodeRedemptionFailureReason
+    ) -> String {
+        switch reason {
+        case .network, .syncFailed:
+            return "We couldn't refresh your subscription. Check your connection and try again."
+        case .notAllowed:
+            return "Offer code redemption isn't available for this Apple Account or device."
+        case .invalidOrIneligible:
+            return "The App Store couldn't redeem that offer. Check the code and its eligibility."
+        case .storeUnavailable:
+            return "Offer code redemption isn't available right now. Please try again later."
+        case .unknown:
+            return "The offer code couldn't be redeemed. Please try again."
+        }
+    }
+
+    private static func completedPurchaseKind(
+        customerInfo: CustomerInfo?,
+        fallback: AnalyticsPurchaseKind
+    ) -> AnalyticsPurchaseKind {
+        guard let entitlement = customerInfo?.entitlements[RevenueCatConfig.proEntitlementID] else {
+            return fallback
+        }
+        return entitlement.periodType == .trial ? .introductoryTrial : .paid
     }
 }

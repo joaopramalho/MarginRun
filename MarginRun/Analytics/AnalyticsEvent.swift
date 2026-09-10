@@ -13,12 +13,20 @@ nonisolated enum JobCreationSource: String, Sendable {
     case onboarding
     case history
     case historyEmptyState = "history_empty_state"
+    case dashboardEmptyState = "dashboard_empty_state"
+    case timerPickerEmptyState = "timer_picker_empty_state"
 }
 
 /// How labor reached the job.
 nonisolated enum LaborEntrySource: String, Sendable {
     case manual
     case timer
+}
+
+/// Where an expense creation flow was opened.
+nonisolated enum ExpenseCreationSource: String, Sendable {
+    case jobDetailQuickExpense = "job_detail_quick_expense"
+    case jobCreationFollowUp = "job_creation_follow_up"
 }
 
 /// Where the labor timer was started from.
@@ -87,6 +95,18 @@ nonisolated enum AnalyticsPlan: String, Sendable {
     case other
 }
 
+/// Which implementation displayed a subscription offer.
+nonisolated enum PaywallSource: String, Sendable {
+    case native
+    case revenueCat = "revenuecat"
+}
+
+/// Whether subscribing begins with Apple's introductory free trial.
+nonisolated enum AnalyticsPurchaseKind: String, Sendable {
+    case paid
+    case introductoryTrial = "introductory_trial"
+}
+
 /// Which control offered the restore. Restore is tracked apart from purchase
 /// everywhere, so a reinstall never reads as a new subscription.
 nonisolated enum RestoreSource: String, Sendable {
@@ -101,6 +121,23 @@ nonisolated enum RestoreOutcome: String, Sendable {
     /// The call succeeded but the account owns nothing.
     case nothingToRestore = "nothing_to_restore"
     case failed
+}
+
+/// Where Apple's offer-code redemption sheet was opened.
+nonisolated enum OfferCodeRedemptionSource: String, Sendable {
+    case settings
+    case nativePaywall = "native_paywall"
+}
+
+/// Safe, low-cardinality reasons for a redemption or entitlement-sync failure.
+/// The offer code and Apple Account details are never available to analytics.
+nonisolated enum OfferCodeRedemptionFailureReason: String, Sendable {
+    case network
+    case notAllowed = "not_allowed"
+    case invalidOrIneligible = "invalid_or_ineligible"
+    case storeUnavailable = "store_unavailable"
+    case syncFailed = "sync_failed"
+    case unknown
 }
 
 /// A purchase failure, reduced to a handful of actionable causes. A user
@@ -148,7 +185,8 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
 
     // Activation
     case jobCreated(source: JobCreationSource, hasCostEstimate: Bool, meetsTargetMargin: Bool)
-    case expenseAdded(category: ExpenseCategory, hasReceipt: Bool)
+    case quickExpenseOpened
+    case expenseAdded(category: ExpenseCategory, hasReceipt: Bool, source: ExpenseCreationSource)
     case laborAdded(source: LaborEntrySource)
     case receiptAttached(source: ReceiptSource)
     case receiptOCRStarted
@@ -159,18 +197,49 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
     case laborLiveActivityUnavailable(reason: LiveActivityUnavailableReason)
     case laborLiveActivityOpened(source: LiveActivityOpenSource)
     case laborLiveActivityEnded(reason: LiveActivityEndReason)
+    case jobEdited(changedContractValue: Bool, changedEstimate: Bool)
+    case jobDeleted(status: JobStatus, hadCosts: Bool)
+    case jobReopened
     case jobCompleted(metTargetMargin: Bool, beatExpectedProfit: Bool)
     case insightsOpened
 
     // Monetization
-    case paywallViewed(feature: ProFeature?)
-    case paywallPlanSelected(plan: AnalyticsPlan, feature: ProFeature?)
-    case purchaseStarted(plan: AnalyticsPlan, feature: ProFeature?)
-    case purchaseCompleted(plan: AnalyticsPlan, feature: ProFeature?)
-    case purchaseCancelled(plan: AnalyticsPlan, feature: ProFeature?)
-    case purchaseFailed(plan: AnalyticsPlan, feature: ProFeature?, reason: PurchaseFailureReason)
-    case restoreStarted(source: RestoreSource)
-    case restoreCompleted(source: RestoreSource, outcome: RestoreOutcome)
+    case paywallViewed(feature: ProFeature?, source: PaywallSource)
+    case paywallPlanSelected(plan: AnalyticsPlan, feature: ProFeature?, source: PaywallSource)
+    case purchaseStarted(
+        plan: AnalyticsPlan,
+        feature: ProFeature?,
+        source: PaywallSource,
+        kind: AnalyticsPurchaseKind
+    )
+    case trialStarted(plan: AnalyticsPlan, feature: ProFeature?, source: PaywallSource)
+    case purchaseCompleted(
+        plan: AnalyticsPlan,
+        feature: ProFeature?,
+        source: PaywallSource,
+        kind: AnalyticsPurchaseKind
+    )
+    case purchaseCancelled(
+        plan: AnalyticsPlan,
+        feature: ProFeature?,
+        source: PaywallSource,
+        kind: AnalyticsPurchaseKind
+    )
+    case purchaseFailed(
+        plan: AnalyticsPlan,
+        feature: ProFeature?,
+        source: PaywallSource,
+        kind: AnalyticsPurchaseKind,
+        reason: PurchaseFailureReason
+    )
+    case restoreStarted(source: RestoreSource, paywallSource: PaywallSource?)
+    case restoreCompleted(source: RestoreSource, paywallSource: PaywallSource?, outcome: RestoreOutcome)
+    case offerCodeRedemptionOpened(source: OfferCodeRedemptionSource)
+    case offerCodeRedemptionSucceeded(source: OfferCodeRedemptionSource)
+    case offerCodeRedemptionFailed(
+        source: OfferCodeRedemptionSource,
+        reason: OfferCodeRedemptionFailureReason
+    )
     case proFeatureAttempted(feature: ProFeature)
 
     /// The wire name. Snake case, stable, and never assembled at a call site.
@@ -181,6 +250,7 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
         case .onboardingCompleted: "onboarding_completed"
         case .onboardingSkipped: "onboarding_skipped"
         case .jobCreated: "job_created"
+        case .quickExpenseOpened: "quick_expense_opened"
         case .expenseAdded: "expense_added"
         case .laborAdded: "labor_added"
         case .receiptAttached: "receipt_attached"
@@ -192,16 +262,23 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
         case .laborLiveActivityUnavailable: "labor_live_activity_unavailable"
         case .laborLiveActivityOpened: "labor_live_activity_opened"
         case .laborLiveActivityEnded: "labor_live_activity_ended"
+        case .jobEdited: "job_edited"
+        case .jobDeleted: "job_deleted"
+        case .jobReopened: "job_reopened"
         case .jobCompleted: "job_completed"
         case .insightsOpened: "insights_opened"
         case .paywallViewed: "paywall_viewed"
         case .paywallPlanSelected: "plan_selected"
         case .purchaseStarted: "purchase_started"
+        case .trialStarted: "trial_started"
         case .purchaseCompleted: "purchase_completed"
         case .purchaseCancelled: "purchase_cancelled"
         case .purchaseFailed: "purchase_failed"
         case .restoreStarted: "restore_started"
         case .restoreCompleted: "restore_completed"
+        case .offerCodeRedemptionOpened: "offer_code_redemption_opened"
+        case .offerCodeRedemptionSucceeded: "offer_code_redemption_succeeded"
+        case .offerCodeRedemptionFailed: "offer_code_redemption_failed"
         case .proFeatureAttempted: "pro_feature_attempted"
         }
     }
@@ -226,7 +303,8 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
     /// install age — are added by ``AnalyticsService``.
     var properties: [String: AnalyticsValue] {
         switch self {
-        case .appFirstOpen, .onboardingStarted, .receiptOCRStarted, .insightsOpened:
+        case .appFirstOpen, .onboardingStarted, .receiptOCRStarted, .insightsOpened,
+             .jobReopened, .quickExpenseOpened:
             return [:]
 
         case let .onboardingCompleted(setBusinessName, setTrade, setHourlyCost, changedTargetMargin):
@@ -247,10 +325,11 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
                 "meets_target_margin": .bool(meetsTargetMargin),
             ]
 
-        case let .expenseAdded(category, hasReceipt):
+        case let .expenseAdded(category, hasReceipt, source):
             return [
                 "category": .string(category.rawValue),
                 "has_receipt": .bool(hasReceipt),
+                "source": .string(source.rawValue),
             ]
 
         case let .laborAdded(source):
@@ -283,43 +362,62 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
         case let .laborLiveActivityEnded(reason):
             return ["availability_reason": .string(reason.rawValue)]
 
+        case let .jobEdited(changedContractValue, changedEstimate):
+            return [
+                "changed_contract_value": .bool(changedContractValue),
+                "changed_estimate": .bool(changedEstimate),
+            ]
+
+        case let .jobDeleted(status, hadCosts):
+            return [
+                "status": .string(status.rawValue),
+                "had_costs": .bool(hadCosts),
+            ]
+
         case let .jobCompleted(metTargetMargin, beatExpectedProfit):
             return [
                 "met_target_margin": .bool(metTargetMargin),
                 "beat_expected_profit": .bool(beatExpectedProfit),
             ]
 
-        case let .paywallViewed(feature):
-            return ["paywall_context": .string(Self.context(for: feature))]
+        case let .paywallViewed(feature, source):
+            return Self.paywallProperties(plan: nil, feature: feature, source: source, kind: nil)
 
-        case let .paywallPlanSelected(plan, feature):
-            return [
-                "plan": .string(plan.rawValue),
-                "paywall_context": .string(Self.context(for: feature)),
-            ]
+        case let .paywallPlanSelected(plan, feature, source):
+            return Self.paywallProperties(plan: plan, feature: feature, source: source, kind: nil)
 
-        case let .purchaseStarted(plan, feature),
-             let .purchaseCompleted(plan, feature),
-             let .purchaseCancelled(plan, feature):
-            return [
-                "plan": .string(plan.rawValue),
-                "paywall_context": .string(Self.context(for: feature)),
-            ]
+        case let .purchaseStarted(plan, feature, source, kind),
+             let .purchaseCompleted(plan, feature, source, kind),
+             let .purchaseCancelled(plan, feature, source, kind):
+            return Self.paywallProperties(plan: plan, feature: feature, source: source, kind: kind)
 
-        case let .purchaseFailed(plan, feature, reason):
-            return [
-                "plan": .string(plan.rawValue),
-                "paywall_context": .string(Self.context(for: feature)),
-                "reason": .string(reason.rawValue),
-            ]
+        case let .trialStarted(plan, feature, source):
+            return Self.paywallProperties(
+                plan: plan,
+                feature: feature,
+                source: source,
+                kind: .introductoryTrial
+            )
 
-        case let .restoreStarted(source):
+        case let .purchaseFailed(plan, feature, source, kind, reason):
+            return Self.paywallProperties(plan: plan, feature: feature, source: source, kind: kind)
+                .merging(["reason": .string(reason.rawValue)]) { current, _ in current }
+
+        case let .restoreStarted(source, paywallSource):
+            return Self.restoreProperties(source: source, paywallSource: paywallSource)
+
+        case let .restoreCompleted(source, paywallSource, outcome):
+            return Self.restoreProperties(source: source, paywallSource: paywallSource)
+                .merging(["outcome": .string(outcome.rawValue)]) { current, _ in current }
+
+        case let .offerCodeRedemptionOpened(source),
+             let .offerCodeRedemptionSucceeded(source):
             return ["source": .string(source.rawValue)]
 
-        case let .restoreCompleted(source, outcome):
+        case let .offerCodeRedemptionFailed(source, reason):
             return [
                 "source": .string(source.rawValue),
-                "outcome": .string(outcome.rawValue),
+                "reason": .string(reason.rawValue),
             ]
 
         case let .proFeatureAttempted(feature):
@@ -332,6 +430,30 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
     /// is the one property the monetization funnel cannot lose.
     static func context(for feature: ProFeature?) -> String {
         feature?.analyticsName ?? "general"
+    }
+
+    private static func paywallProperties(
+        plan: AnalyticsPlan?,
+        feature: ProFeature?,
+        source: PaywallSource,
+        kind: AnalyticsPurchaseKind?
+    ) -> [String: AnalyticsValue] {
+        var properties: [String: AnalyticsValue] = [
+            "paywall_context": .string(context(for: feature)),
+            "paywall_source": .string(source.rawValue),
+        ]
+        if let plan { properties["plan"] = .string(plan.rawValue) }
+        if let kind { properties["purchase_kind"] = .string(kind.rawValue) }
+        return properties
+    }
+
+    private static func restoreProperties(
+        source: RestoreSource,
+        paywallSource: PaywallSource?
+    ) -> [String: AnalyticsValue] {
+        var properties: [String: AnalyticsValue] = ["source": .string(source.rawValue)]
+        if let paywallSource { properties["paywall_source"] = .string(paywallSource.rawValue) }
+        return properties
     }
 }
 

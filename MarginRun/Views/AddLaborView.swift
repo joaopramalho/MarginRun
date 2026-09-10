@@ -3,6 +3,12 @@ import SwiftUI
 
 struct AddLaborView: View {
     let job: Job
+    /// The entry being corrected, or `nil` when logging a new one.
+    ///
+    /// One view for both, the way ``AddExtraRevenueView`` already does it: the
+    /// fields, the arithmetic and the live cost line are identical, and two
+    /// copies of them would be two things to keep in step.
+    let entry: LaborEntry?
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -11,15 +17,21 @@ struct AddLaborView: View {
     @State private var isSaving = false
     @State private var saveErrorMessage: String?
 
-    init(job: Job, preferences: AppPreferences = AppPreferences()) {
+    init(job: Job, entry: LaborEntry? = nil, preferences: AppPreferences = AppPreferences()) {
         self.job = job
-        _draft = State(initialValue: AddLaborDraft(
-            defaultHourlyCostText: preferences.defaultHourlyCostText
-        ))
+        self.entry = entry
+        _draft = State(initialValue: entry.map(AddLaborDraft.init(entry:))
+            ?? AddLaborDraft(defaultHourlyCostText: preferences.defaultHourlyCostText))
     }
 
+    private var isEditing: Bool { entry != nil }
+
     private var canSave: Bool {
-        job.status == .active && draft.canSave && !isSaving
+        guard job.status == .active, draft.canSave, !isSaving else { return false }
+        // Save stays inert on an untouched edit. A money field rewrites itself
+        // for display on appear, so this is compared through parsed values.
+        if let entry { return draft.differs(from: entry) }
+        return true
     }
 
     var body: some View {
@@ -54,11 +66,13 @@ struct AddLaborView: View {
                     }
                     .padding(.vertical, 4)
                 } footer: {
-                    Text("Hours × hourly cost. This amount is added to the job as soon as you save.")
+                    Text(isEditing
+                         ? "Hours × hourly cost. Saving updates what this job has spent on labor."
+                         : "Hours × hourly cost. This amount is added to the job as soon as you save.")
                 }
             }
             .keyboardEscapes()
-            .navigationTitle("Add Labor")
+            .navigationTitle(isEditing ? "Edit Labor" : "Add Labor")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -70,7 +84,7 @@ struct AddLaborView: View {
                 }
             }
             .alert(
-                "Couldn’t save labor",
+                isEditing ? "Couldn’t save changes" : "Couldn’t save labor",
                 isPresented: Binding(
                     get: { saveErrorMessage != nil },
                     set: { if !$0 { saveErrorMessage = nil } }
@@ -84,17 +98,49 @@ struct AddLaborView: View {
     }
 
     private func save() {
-        guard job.status == .active, let entry = draft.makeEntry(job: job) else { return }
+        guard canSave else { return }
         isSaving = true
-        modelContext.insert(entry)
+
+        if let entry {
+            update(entry)
+        } else {
+            insert()
+        }
+    }
+
+    private func insert() {
+        guard let newEntry = draft.makeEntry(job: job) else {
+            isSaving = false
+            return
+        }
+        modelContext.insert(newEntry)
 
         do {
             try modelContext.save()
             analytics.trackLaborAdded(source: .manual)
             dismiss()
         } catch {
-            modelContext.delete(entry)
+            modelContext.delete(newEntry)
             saveErrorMessage = "We couldn’t save this labor entry. Please try again."
+            isSaving = false
+        }
+    }
+
+    private func update(_ entry: LaborEntry) {
+        // Captured before the write, so a failed save puts back exactly what
+        // was on screen rather than leaving the entry half-edited in memory.
+        let original = AddLaborDraft(entry: entry)
+        guard draft.apply(to: entry) else {
+            isSaving = false
+            return
+        }
+
+        do {
+            try modelContext.save()
+            dismiss()
+        } catch {
+            original.apply(to: entry)
+            saveErrorMessage = "We couldn’t save this change. Please try again."
             isSaving = false
         }
     }

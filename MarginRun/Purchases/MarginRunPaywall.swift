@@ -14,6 +14,9 @@ import SwiftUI
 struct MarginRunPaywall: View {
     /// What the customer reached for. `nil` uses the general pitch.
     var feature: ProFeature?
+    /// The centralized router has already loaded the current Offering. Direct
+    /// previews can still ask this view to load it itself.
+    var loadsOfferingOnAppear = true
 
     @EnvironmentObject private var store: SubscriptionStore
     @EnvironmentObject private var analytics: AnalyticsService
@@ -21,10 +24,7 @@ struct MarginRunPaywall: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var selectedPlanID: String?
-    /// One presentation, one `paywall_viewed`. `@State` resets with the sheet,
-    /// so re-renders and offering reloads cannot inflate the count.
-    @State private var analyticsReporter = PaywallAnalyticsReporter()
-
+    @StateObject private var offerCodeRedemption = OfferCodeRedemptionPresentation()
     var body: some View {
         NavigationStack {
             Group {
@@ -33,7 +33,10 @@ struct MarginRunPaywall: View {
                     LoadingState()
 
                 case .loaded(let offering):
-                    let plans = PlanOption.options(from: offering)
+                    let plans = PlanOption.options(
+                        from: offering,
+                        introEligibilityByProductID: store.introEligibilityByProductID
+                    )
                     if plans.isEmpty {
                         // Rather than render an empty picker with a live buy
                         // button that cannot succeed.
@@ -67,16 +70,17 @@ struct MarginRunPaywall: View {
             }
         }
         .task {
-            // Reported before the offering resolves, so a customer who reached
-            // the paywall on a bad connection still counts as having reached it.
-            analyticsReporter.reportIfNeeded(feature: feature, analytics: analytics)
-            await store.loadOffering()
+            if loadsOfferingOnAppear { await store.loadOffering() }
         }
         .onChange(of: store.isPro) { _, isPro in
             // The gated feature unlocks the moment the entitlement lands, with
             // no restart: the customer info stream drives this.
             if isPro { dismiss() }
         }
+        .appStoreOfferCodeRedemption(
+            presentation: offerCodeRedemption,
+            source: .nativePaywall
+        )
         .subscriptionErrorAlert()
     }
 
@@ -184,6 +188,7 @@ struct MarginRunPaywall: View {
     ) -> some View {
         VStack(spacing: 12) {
             planPicker(plans: plans, selected: selected)
+            trialMessage(for: selected)
             purchaseButton(offering: offering, selected: selected)
 
             VStack(spacing: 8) {
@@ -214,10 +219,47 @@ struct MarginRunPaywall: View {
                         selectedPlanID = plan.id
                     }
                     analytics.track(
-                        .paywallPlanSelected(plan: plan.analyticsPlan, feature: feature)
+                        .paywallPlanSelected(
+                            plan: plan.analyticsPlan,
+                            feature: feature,
+                            source: .native
+                        )
                     )
                 }
             }
+        }
+    }
+
+    /// Makes the trial feel concrete at the decision point: value now, exact
+    /// renewal terms next. It only exists for an eligible StoreKit offer, so an
+    /// ineligible customer never sees a promise the App Store cannot honor.
+    @ViewBuilder
+    private func trialMessage(for plan: PlanOption?) -> some View {
+        if let trial = plan?.trial {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(trial.reassuranceHeadline)
+                        .font(.subheadline.weight(.semibold))
+                    Text(trial.reassuranceDetail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("paywallTrialMessage")
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
     }
 
@@ -225,16 +267,20 @@ struct MarginRunPaywall: View {
         Button {
             guard let selected, let package = package(for: selected, in: offering) else { return }
             Task {
-                await store.purchase(package, plan: selected.analyticsPlan, feature: feature)
+                await store.purchase(
+                    package,
+                    plan: selected.analyticsPlan,
+                    feature: feature,
+                    paywallSource: .native,
+                    purchaseKind: selected.trial == nil ? .paid : .introductoryTrial
+                )
             }
         } label: {
             Group {
                 if store.isPurchasing {
                     ProgressView()
                 } else {
-                    // Never "Start Free Trial": no current StoreKit product
-                    // carries an introductory offer.
-                    Text("Start MarginRun Pro")
+                    Text(selected?.trial == nil ? "Start MarginRun Pro" : "Start Free Trial")
                         .font(.headline)
                 }
             }
@@ -252,26 +298,57 @@ struct MarginRunPaywall: View {
 
     /// Required by Apple, and deliberately quiet: present and reachable without
     /// competing with the decision.
+    @ViewBuilder
     private var secondaryLinks: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(spacing: 10))
-            : AnyLayout(HStackLayout(spacing: 14))
-
-        return layout {
-            Button("Restore") {
-                Task { await store.restorePurchases(from: .paywall) }
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 10) {
+                restoreButton
+                redeemOfferCodeButton
+                privacyLink
+                termsLink
             }
-            .disabled(store.isRestoring)
-            .accessibilityIdentifier("paywallRestoreButton")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        } else {
+            VStack(spacing: 8) {
+                HStack(spacing: 18) {
+                    restoreButton
+                    redeemOfferCodeButton
+                }
 
-            Link("Privacy Policy", destination: RevenueCatConfig.Legal.privacyPolicy)
-                .accessibilityIdentifier("paywallPrivacyLink")
-
-            Link("Terms of Use", destination: RevenueCatConfig.Legal.termsOfUse)
-                .accessibilityIdentifier("paywallTermsLink")
+                HStack(spacing: 18) {
+                    privacyLink
+                    termsLink
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
         }
-        .font(.caption2)
-        .foregroundStyle(.secondary)
+    }
+
+    private var restoreButton: some View {
+        Button("Restore") {
+            Task { await store.restorePurchases(from: .paywall, paywallSource: .native) }
+        }
+        .disabled(store.isRestoring)
+        .accessibilityIdentifier("paywallRestoreButton")
+    }
+
+    private var redeemOfferCodeButton: some View {
+        Button("Redeem Offer Code") {
+            offerCodeRedemption.present(using: store, from: .nativePaywall)
+        }
+        .accessibilityIdentifier("paywallRedeemOfferCodeButton")
+    }
+
+    private var privacyLink: some View {
+        Link("Privacy Policy", destination: RevenueCatConfig.Legal.privacyPolicy)
+            .accessibilityIdentifier("paywallPrivacyLink")
+    }
+
+    private var termsLink: some View {
+        Link("Terms of Use", destination: RevenueCatConfig.Legal.termsOfUse)
+            .accessibilityIdentifier("paywallTermsLink")
     }
 
     private func disclosure(for plan: PlanOption?) -> String {
@@ -341,7 +418,14 @@ private struct PlanCard: View {
                         }
                     }
 
-                    if let equivalentLine = plan.equivalentLine {
+                    if let trial = plan.trial {
+                        Text(trial.summary)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tint)
+                        Text(trial.renewalLine)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if let equivalentLine = plan.equivalentLine {
                         Text(equivalentLine)
                             .font(.footnote)
                             .foregroundStyle(.secondary)

@@ -90,3 +90,118 @@ struct CreateJobDraft: Equatable {
         )
     }
 }
+
+// MARK: - Editing an existing job
+
+/// What an edit actually altered, for the `job_edited` event.
+///
+/// Categorical, never the values themselves: knowing *that* contractors revise
+/// their contract value is the product question, and no amount needs to leave
+/// the device to answer it.
+nonisolated struct JobEditChanges: Equatable, Sendable {
+    var changedContractValue = false
+    var changedEstimate = false
+
+    /// Whether anything at all was altered. A Save that changed nothing is
+    /// still a successful save, but it is not an edit worth reporting.
+    var isEmpty: Bool { self == JobEditChanges() }
+}
+
+extension CreateJobDraft {
+
+    /// Seeds the draft from a job that already exists, so the edit form opens
+    /// on the exact numbers currently driving that job's margin.
+    ///
+    /// Amounts are written in canonical dot-decimal form, which is what
+    /// ``MoneyInput/parse(_:locale:)`` recognizes before it consults the
+    /// locale — a comma-locale device would otherwise re-read `7.5` as `7`.
+    init(job: Job) {
+        self.init(
+            name: job.name,
+            customerName: job.customerName,
+            contractValueText: Self.canonicalText(job.contractValue),
+            materialsText: Self.canonicalText(job.estimatedMaterials),
+            laborText: Self.canonicalText(job.estimatedLabor),
+            subcontractorsText: Self.canonicalText(job.estimatedSubcontractors),
+            equipmentText: Self.canonicalText(job.estimatedEquipment),
+            otherText: Self.canonicalText(job.estimatedOther),
+            targetMarginText: Self.canonicalText(job.targetMargin)
+        )
+    }
+
+    /// Writes the validated draft onto `job`.
+    ///
+    /// Returns `nil` — leaving `job` untouched — when the draft is incomplete,
+    /// so a half-filled form can never blank out a contract value that the
+    /// whole margin is computed from. Costs already logged are never touched:
+    /// an edit revises the *estimate*, never the record of what was spent.
+    @discardableResult
+    func apply(to job: Job) -> JobEditChanges? {
+        guard let fields = validatedFields else { return nil }
+
+        var changes = JobEditChanges()
+        changes.changedContractValue = job.contractValue != fields.contractValue
+        changes.changedEstimate = job.estimatedMaterials != fields.estimatedMaterials
+            || job.estimatedLabor != fields.estimatedLabor
+            || job.estimatedSubcontractors != fields.estimatedSubcontractors
+            || job.estimatedEquipment != fields.estimatedEquipment
+            || job.estimatedOther != fields.estimatedOther
+
+        job.name = fields.name
+        job.customerName = fields.customerName
+        job.contractValue = fields.contractValue
+        job.targetMargin = fields.targetMargin
+        job.estimatedMaterials = fields.estimatedMaterials
+        job.estimatedLabor = fields.estimatedLabor
+        job.estimatedSubcontractors = fields.estimatedSubcontractors
+        job.estimatedEquipment = fields.estimatedEquipment
+        job.estimatedOther = fields.estimatedOther
+
+        return changes
+    }
+
+    /// Whether saving would actually change anything on `job`.
+    ///
+    /// Compared through the parsed values, never the field text. A money field
+    /// rewrites itself for display the moment it appears — `"4800"` becomes
+    /// `"$4,800.00"` — so a textual comparison reports an edit before the
+    /// contractor has touched the form, which is exactly when Save must stay
+    /// inert.
+    func differs(from job: Job) -> Bool {
+        guard let fields = validatedFields else { return false }
+
+        return fields.name != job.name
+            || fields.customerName != job.customerName
+            || fields.contractValue != job.contractValue
+            || fields.targetMargin != job.targetMargin
+            || fields.estimatedMaterials != job.estimatedMaterials
+            || fields.estimatedLabor != job.estimatedLabor
+            || fields.estimatedSubcontractors != job.estimatedSubcontractors
+            || fields.estimatedEquipment != job.estimatedEquipment
+            || fields.estimatedOther != job.estimatedOther
+    }
+
+    /// The draft's estimates measured against the costs `job` has already
+    /// logged.
+    ///
+    /// The create form previews an empty job, where estimate *is* the whole
+    /// picture. An edit happens mid-job, so the number that matters is what the
+    /// revised estimate does to the margin given what has already been spent —
+    /// which is the question the contractor opened the form to answer.
+    func financials(withActualsFrom job: Job) -> JobFinancials {
+        var inputs = job.financialInputs
+        inputs.contractValue = MoneyInput.parse(contractValueText) ?? 0
+        inputs.targetMarginPercent = MoneyInput.parse(targetMarginText) ?? job.targetMargin
+        inputs.estimatedMaterials = MoneyInput.parse(materialsText) ?? 0
+        inputs.estimatedLabor = MoneyInput.parse(laborText) ?? 0
+        inputs.estimatedSubcontractors = MoneyInput.parse(subcontractorsText) ?? 0
+        inputs.estimatedEquipment = MoneyInput.parse(equipmentText) ?? 0
+        inputs.estimatedOther = MoneyInput.parse(otherText) ?? 0
+        return JobFinancials(inputs: inputs)
+    }
+
+    /// Dot-decimal, no grouping separator, no trailing `.0` on a whole number.
+    private static func canonicalText(_ value: Decimal) -> String {
+        NSDecimalNumber(decimal: value).stringValue
+    }
+}

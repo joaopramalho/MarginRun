@@ -65,7 +65,7 @@ struct CreateJobView: View {
             }
             .sheet(isPresented: $isAddingExpense) {
                 if let createdJob {
-                    AddExpenseView(job: createdJob)
+                    AddExpenseView(job: createdJob, source: .jobCreationFollowUp)
                 }
             }
             .sheet(isPresented: $isAddingLabor) {

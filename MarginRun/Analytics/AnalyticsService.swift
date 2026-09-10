@@ -86,8 +86,12 @@ final class AnalyticsService: ObservableObject {
         ))
     }
 
-    func trackExpenseAdded(category: ExpenseCategory, hasReceipt: Bool) {
-        track(.expenseAdded(category: category, hasReceipt: hasReceipt))
+    func trackExpenseAdded(
+        category: ExpenseCategory,
+        hasReceipt: Bool,
+        source: ExpenseCreationSource
+    ) {
+        track(.expenseAdded(category: category, hasReceipt: hasReceipt, source: source))
     }
 
     func trackLaborAdded(source: LaborEntrySource) {

@@ -47,6 +47,8 @@ struct JobsListView: View {
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
+            } footer: {
+                freePlanSlotMeter
             }
 
             Section(selectedFilter.sectionTitle) {
@@ -93,6 +95,41 @@ struct JobsListView: View {
                 }
                 .offset(y: 70)
             }
+        }
+    }
+
+    /// How much of the free plan is spoken for, shown before it blocks anything.
+    ///
+    /// A limit a customer only meets by being stopped reads as a toll booth; the
+    /// same limit, visible while there is still room, reads as the shape of the
+    /// plan they chose. It also means the last free slot is *seen* being spent,
+    /// which is the moment the upgrade actually means something — and the offer
+    /// appears only then, never as a standing advertisement.
+    ///
+    /// Completing a job frees a slot, so that route is named first: the upgrade
+    /// has to be the better option, not the only one.
+    @ViewBuilder
+    private var freePlanSlotMeter: some View {
+        if !subscriptions.isPro, selectedFilter == .active, searchText.isEmpty {
+            let limit = FreePlanLimits.maxActiveJobs
+            let isAtLimit = activeJobCount >= limit
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("\(min(activeJobCount, limit)) of \(limit) active job slots used")
+                    .foregroundStyle(isAtLimit ? Color.orange : Color.secondary)
+
+                if isAtLimit {
+                    Button("Complete a job to free a slot, or go Pro for unlimited active jobs.") {
+                        subscriptions.requirePro(.unlimitedJobs, presenting: $paywallFeature)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tint)
+                    .multilineTextAlignment(.leading)
+                    .accessibilityIdentifier("freePlanSlotUpsell")
+                }
+            }
+            .padding(.top, 2)
+            .accessibilityIdentifier("freePlanSlotMeter")
         }
     }
 

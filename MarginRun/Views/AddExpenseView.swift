@@ -5,6 +5,7 @@ import UIKit
 
 struct AddExpenseView: View {
     let job: Job
+    let source: ExpenseCreationSource
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -258,7 +259,8 @@ struct AddExpenseView: View {
             }
             analytics.trackExpenseAdded(
                 category: category,
-                hasReceipt: savedReceiptFileName != nil
+                hasReceipt: savedReceiptFileName != nil,
+                source: source
             )
             dismiss()
         } catch {

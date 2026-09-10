@@ -4,6 +4,7 @@ import SwiftData
 struct JobDetailView: View {
     @Bindable var job: Job
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var laborTimer: LaborTimerStore
     @EnvironmentObject private var subscriptions: SubscriptionStore
     @EnvironmentObject private var analytics: AnalyticsService
@@ -12,13 +13,17 @@ struct JobDetailView: View {
     @State private var isAddingExtraRevenue = false
     @State private var paywallFeature: ProFeature?
     @State private var isShowingLaborTimer = false
-    @State private var isEnteringTimerRate = false
-    @State private var timerHourlyCostText = ""
     @State private var isConfirmingCompletion = false
+    @State private var isEditingJob = false
+    @State private var isConfirmingDeletion = false
     @State private var completionErrorMessage: String?
+    @State private var deletionErrorMessage: String?
     @State private var costEntryErrorMessage: String?
     @State private var selectedReceiptExpense: Expense?
     @State private var selectedExtraRevenue: ExtraRevenue?
+    @State private var selectedExpense: Expense?
+    @State private var selectedLaborEntry: LaborEntry?
+    @State private var isConfirmingReopen = false
 
     private var financials: JobFinancials { job.financials }
     private var completionReport: JobCompletionReport { job.completionReport }
@@ -57,7 +62,7 @@ struct JobDetailView: View {
 
             laborSection
 
-            Section("Expenses") {
+            Section {
                 if job.expenses.isEmpty {
                     Text("No expenses yet")
                         .foregroundStyle(.secondary)
@@ -74,25 +79,41 @@ struct JobDetailView: View {
                                 .accessibilityHint("Opens receipt details")
                             }
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack {
-                                    Text(expense.category.title)
-                                    Spacer()
-                                    Text(MoneyFormat.usd(expense.amount))
-                                        .monospacedDigit()
+                            // The rest of the row opens the expense itself. Its
+                            // amount was previously changeable only by replacing
+                            // the receipt photo, which left an expense with no
+                            // photo — or a right photo and a wrong total — with
+                            // no correction short of deleting and retyping it.
+                            Button {
+                                selectedExpense = expense
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack {
+                                        Text(expense.category.title)
+                                        Spacer()
+                                        Text(MoneyFormat.usd(expense.amount))
+                                            .monospacedDigit()
+                                    }
+                                    if !expense.vendor.isEmpty {
+                                        Text(expense.vendor)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    if !expense.note.isEmpty {
+                                        Text(expense.note)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(2)
+                                    }
                                 }
-                                if !expense.vendor.isEmpty {
-                                    Text(expense.vendor)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                if !expense.note.isEmpty {
-                                    Text(expense.note)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(2)
-                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityHint(job.status == .active
+                                ? "Opens this expense for editing"
+                                : "Opens this expense")
+                            .accessibilityIdentifier("expenseRowButton")
                         }
                         .padding(.vertical, expense.receiptFileName == nil ? 0 : 3)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -103,6 +124,14 @@ struct JobDetailView: View {
                             }
                         }
                     }
+                }
+            } header: {
+                Text("Expenses")
+            } footer: {
+                // Labor already totals itself in its own footer; expenses are
+                // the longer list of the two and had no total at all.
+                if !job.expenses.isEmpty {
+                    Text("\(job.expenses.count) expense\(job.expenses.count == 1 ? "" : "s") · \(MoneyFormat.usd(loggedExpenseTotal)) logged")
                 }
             }
 
@@ -142,17 +171,61 @@ struct JobDetailView: View {
             if job.status == .active {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Add Expense") {
+                        analytics.track(.quickExpenseOpened)
                         isAddingExpense = true
                     }
                     .accessibilityIdentifier("addExpenseButton")
                 }
             }
+
+            // Editing and deleting are deliberate, occasional acts. Behind a
+            // menu they stay reachable without competing with the one thing
+            // this screen is opened for, which is logging a cost.
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    if job.status == .active {
+                        Button {
+                            isEditingJob = true
+                        } label: {
+                            Label("Edit Job", systemImage: "pencil")
+                        }
+                        .accessibilityIdentifier("editJobButton")
+                    } else {
+                        Button {
+                            startReopening()
+                        } label: {
+                            Label("Reopen Job", systemImage: "arrow.uturn.backward")
+                        }
+                        .accessibilityIdentifier("reopenJobButton")
+                    }
+
+                    Button(role: .destructive) {
+                        isConfirmingDeletion = true
+                    } label: {
+                        Label("Delete Job", systemImage: "trash")
+                    }
+                    .accessibilityIdentifier("deleteJobButton")
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("Job options")
+                .accessibilityIdentifier("jobOptionsMenu")
+            }
+        }
+        .sheet(isPresented: $isEditingJob) {
+            EditJobView(job: job)
         }
         .sheet(isPresented: $isAddingExpense) {
-            AddExpenseView(job: job)
+            AddExpenseView(job: job, source: .jobDetailQuickExpense)
         }
         .sheet(isPresented: $isAddingLabor) {
             AddLaborView(job: job)
+        }
+        .sheet(item: $selectedExpense) { expense in
+            EditExpenseView(expense: expense, allowsEditing: job.status == .active)
+        }
+        .sheet(item: $selectedLaborEntry) { entry in
+            AddLaborView(job: job, entry: entry)
         }
         .sheet(isPresented: $isAddingExtraRevenue) {
             AddExtraRevenueView(job: job)
@@ -190,6 +263,17 @@ struct JobDetailView: View {
             Text(completionErrorMessage ?? "The job could not be saved.")
         }
         .alert(
+            "Couldn’t delete job",
+            isPresented: Binding(
+                get: { deletionErrorMessage != nil },
+                set: { if !$0 { deletionErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deletionErrorMessage ?? "The job could not be deleted.")
+        }
+        .alert(
             "Cost entry update",
             isPresented: Binding(
                 get: { costEntryErrorMessage != nil },
@@ -200,16 +284,31 @@ struct JobDetailView: View {
         } message: {
             Text(costEntryErrorMessage ?? "The cost entry could not be updated.")
         }
-        .alert("Start Work", isPresented: $isEnteringTimerRate) {
-            TextField("Hourly cost", text: $timerHourlyCostText)
-                .keyboardType(.decimalPad)
-            Button("Cancel", role: .cancel) {}
-            Button("Start") {
-                startTimerWithEnteredRate()
+        .confirmationDialog(
+            "Reopen \(job.name)?",
+            isPresented: $isConfirmingReopen,
+            titleVisibility: .visible
+        ) {
+            Button("Reopen Job") {
+                reopenJob()
             }
-            .disabled(enteredTimerHourlyCost == nil)
+            .accessibilityIdentifier("confirmReopenJobButton")
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Enter the hourly cost for this work session.")
+            Text("The job goes back to active so you can log the costs that came in late. Its final profit and margin are recalculated the next time you complete it.")
+        }
+        .confirmationDialog(
+            "Delete \(job.name)?",
+            isPresented: $isConfirmingDeletion,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Job", role: .destructive) {
+                deleteJob()
+            }
+            .accessibilityIdentifier("confirmDeleteJobButton")
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(deletionWarning)
         }
     }
 
@@ -220,27 +319,37 @@ struct JobDetailView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(job.laborEntries.sorted { $0.createdAt > $1.createdAt }) { entry in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(entry.createdAt.formatted(date: .abbreviated, time: .omitted))
-                            Spacer()
-                            Text(MoneyFormat.usd(entry.cost))
-                                .fontWeight(.medium)
-                                .monospacedDigit()
-                        }
+                    Button {
+                        selectedLaborEntry = entry
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(entry.createdAt.formatted(date: .abbreviated, time: .omitted))
+                                Spacer()
+                                Text(MoneyFormat.usd(entry.cost))
+                                    .fontWeight(.medium)
+                                    .monospacedDigit()
+                            }
 
-                        Text("\(formattedHours(entry.hours)) × \(MoneyFormat.usd(entry.hourlyCost))/hr")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-
-                        if !entry.note.isEmpty {
-                            Text(entry.note)
+                            Text("\(formattedHours(entry.hours)) × \(MoneyFormat.usd(entry.hourlyCost))/hr")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                                .monospacedDigit()
+
+                            if !entry.note.isEmpty {
+                                Text(entry.note)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .disabled(job.status != .active)
+                    .accessibilityHint("Opens this labor entry for editing")
+                    .accessibilityIdentifier("laborRowButton")
                     .padding(.vertical, 2)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         if job.status == .active {
@@ -365,6 +474,10 @@ struct JobDetailView: View {
         .contentShape(Rectangle())
     }
 
+    private var loggedExpenseTotal: Decimal {
+        job.expenses.reduce(0) { $0 + $1.amount }
+    }
+
     private var trackedLaborHours: Decimal {
         job.laborEntries.reduce(0) { $0 + $1.hours }
     }
@@ -387,24 +500,15 @@ struct JobDetailView: View {
 
         guard subscriptions.requirePro(.laborTimer, presenting: $paywallFeature) else { return }
 
-        let preferences = AppPreferences()
-        guard let hourlyCost = preferences.defaultHourlyCost else {
-            timerHourlyCostText = preferences.defaultHourlyCostText
-            isEnteringTimerRate = true
-            return
-        }
-
-        startTimer(hourlyCost: hourlyCost)
-    }
-
-    private var enteredTimerHourlyCost: Decimal? {
-        guard let value = MoneyInput.parse(timerHourlyCostText), value > 0 else { return nil }
-        return value
-    }
-
-    private func startTimerWithEnteredRate() {
-        guard let hourlyCost = enteredTimerHourlyCost else { return }
-        startTimer(hourlyCost: hourlyCost)
+        // No rate on file is not a reason to stop the clock. Starting used to
+        // open a modal demanding an hourly cost before the timer would run,
+        // which is friction at the one moment the contractor wants a single
+        // tap — and it disagreed with the Timer tab, which has always started
+        // immediately and collected the rate at review. The review screen is
+        // built for exactly that: it shows "Set at review" while running and
+        // refuses to confirm the entry without a rate, so nothing can be saved
+        // at zero.
+        startTimer(hourlyCost: AppPreferences().defaultHourlyCost ?? 0)
     }
 
     private func startTimer(hourlyCost: Decimal) {
@@ -427,7 +531,9 @@ struct JobDetailView: View {
         formatter.numberStyle = .decimal
         formatter.minimumFractionDigits = 0
         formatter.maximumFractionDigits = 2
-        formatter.locale = Locale(identifier: "en_US")
+        // Sits in the same row as an hourly cost, which already follows the
+        // device: "1.5 hours × R$ 80,00/hr" mixes two separators in one line.
+        formatter.locale = .autoupdatingCurrent
         let value = formatter.string(from: hours as NSDecimalNumber) ?? "—"
         return "\(value) \(hours == 1 ? "hour" : "hours")"
     }
@@ -678,6 +784,98 @@ struct JobDetailView: View {
         // rather than as the amounts behind them.
         let report = job.completionReport
         analytics.trackJobCompleted(report: report)
+    }
+
+    /// Names what goes with the job, so the confirmation is a decision rather
+    /// than a dare. Receipts are files on disk, not rows, which is why they are
+    /// called out separately.
+    private var deletionWarning: String {
+        let expenses = job.expenses.count
+        let labor = job.laborEntries.count
+        guard expenses + labor > 0 else {
+            return "Nothing has been logged against this job yet. This can’t be undone."
+        }
+
+        var parts: [String] = []
+        if expenses > 0 {
+            parts.append("\(expenses) expense\(expenses == 1 ? "" : "s")")
+        }
+        if labor > 0 {
+            parts.append("\(labor) labor entr\(labor == 1 ? "y" : "ies")")
+        }
+
+        return "\(parts.joined(separator: " and ")) will be deleted with it, "
+            + "including any receipt photos. This can’t be undone."
+    }
+
+    /// Reopening consumes an active-job slot, so it meets the same limit that
+    /// creating one does — a free account cannot get to three active jobs by
+    /// completing two and reopening a third.
+    private func startReopening() {
+        let activeJobCount = (try? modelContext.fetchCount(
+            FetchDescriptor<Job>(predicate: #Predicate { $0.statusRaw == "active" })
+        )) ?? 0
+
+        guard subscriptions.requireActiveJobSlot(
+            activeJobCount: activeJobCount,
+            presenting: $paywallFeature
+        ) else { return }
+
+        isConfirmingReopen = true
+    }
+
+    /// Undoes a completion.
+    ///
+    /// Completing was a one-way door: a job finished by mistake, or one whose
+    /// last supplier invoice arrived a day late, could only be corrected by
+    /// deleting the job and re-entering every cost on it. The completion
+    /// snapshot is discarded rather than kept, because a stored result that no
+    /// longer matches the costs underneath it is worse than no result.
+    private func reopenJob() {
+        job.discardCompletion()
+
+        do {
+            try modelContext.save()
+        } catch {
+            job.complete()
+            completionErrorMessage = "We couldn’t reopen this job. Please try again."
+            return
+        }
+
+        analytics.track(.jobReopened)
+    }
+
+    private func deleteJob() {
+        // Same guard as completing: a session outliving its job would leave the
+        // Lock Screen counting time against a job that no longer exists.
+        if laborTimer.session?.jobID == job.id {
+            deletionErrorMessage = "Stop and confirm or discard the active labor timer before deleting this job."
+            return
+        }
+
+        let status = job.status
+        let hadCosts = !job.expenses.isEmpty || !job.laborEntries.isEmpty
+        // Read before the cascade removes the expenses that name them.
+        let receiptFileNames = job.expenses.compactMap(\.receiptFileName)
+
+        modelContext.delete(job)
+
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            deletionErrorMessage = "The job wasn’t deleted. Please try again."
+            return
+        }
+
+        // SwiftData's cascade takes the expense rows; the photos they point at
+        // are files, and would otherwise sit in Application Support forever.
+        for fileName in receiptFileNames {
+            try? ReceiptStorage.delete(fileName: fileName)
+        }
+
+        analytics.track(.jobDeleted(status: status, hadCosts: hadCosts))
+        dismiss()
     }
 
     private func deleteExpense(_ expense: Expense) {

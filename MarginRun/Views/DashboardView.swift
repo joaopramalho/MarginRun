@@ -6,9 +6,24 @@ struct DashboardView: View {
     @StateObject private var notificationService = MarginNotificationService()
     @EnvironmentObject private var subscriptions: SubscriptionStore
     @State private var paywallFeature: ProFeature?
+    @State private var isCreatingJob = false
 
     private var activeJobs: [Job] {
         jobs.filter { $0.status == .active }
+    }
+
+    /// Dashboard is the launch tab, so its empty state is the first thing a new
+    /// contractor sees. It used to name another tab and offer no way to get
+    /// there — a screen that describes the next step but does not perform it
+    /// leaves the decision to the customer at exactly the point they have the
+    /// least reason to make it. The gate is the same one History applies, so a
+    /// free account still meets the limit at the limit, not before.
+    private func startCreatingJob() {
+        guard subscriptions.requireActiveJobSlot(
+            activeJobCount: activeJobs.count,
+            presenting: $paywallFeature
+        ) else { return }
+        isCreatingJob = true
     }
 
     private var marginAlerts: [MarginAlert] {
@@ -39,75 +54,88 @@ struct DashboardView: View {
         )
     }
 
+    /// Nothing has ever been tracked. Distinct from "no *active* jobs", which
+    /// is a real portfolio that happens to be between jobs.
+    private var isFirstRun: Bool { jobs.isEmpty }
+
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
-                portfolioOverview
+                if isFirstRun {
+                    firstRunInvitation
+                } else {
+                    portfolioOverview
 
-                dashboardSection("Top alerts") {
-                    if !subscriptions.isUnlocked(.marginAlerts) {
-                        marginAlertsUpsell
-                    } else if marginAlerts.isEmpty {
-                        Label("No active job alerts", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(18)
-                            .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
-                    } else {
-                        VStack(spacing: 0) {
-                            ForEach(Array(marginAlerts.prefix(3))) { alert in
-                                if let job = activeJobs.first(where: { $0.id == alert.jobID }) {
+                    dashboardSection("Top alerts") {
+                        if !subscriptions.isUnlocked(.marginAlerts) {
+                            marginAlertsUpsell
+                        } else if marginAlerts.isEmpty {
+                            Label("No active job alerts", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(18)
+                                .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+                        } else {
+                            VStack(spacing: 0) {
+                                ForEach(Array(marginAlerts.prefix(3))) { alert in
+                                    if let job = activeJobs.first(where: { $0.id == alert.jobID }) {
+                                        NavigationLink {
+                                            JobDetailView(job: job)
+                                        } label: {
+                                            alertRow(alert)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+
+                                    if alert.id != marginAlerts.prefix(3).last?.id {
+                                        Divider()
+                                            .padding(.leading, 44)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
+                        }
+
+                        if subscriptions.isUnlocked(.marginAlerts) {
+                            notificationPermissionRow
+                        }
+                    }
+
+                    dashboardSection("Active jobs") {
+                        if activeJobs.isEmpty {
+                            ContentUnavailableView {
+                                Label("No active jobs", systemImage: "hammer")
+                            } description: {
+                                Text("Create a job and MarginRun starts tracking its budget and margin as costs land.")
+                            } actions: {
+                                Button("Create Job") {
+                                    startCreatingJob()
+                                }
+                                .accessibilityIdentifier("dashboardCreateJobButton")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 18)
+                        } else {
+                            VStack(spacing: 0) {
+                                ForEach(activeJobs) { job in
                                     NavigationLink {
                                         JobDetailView(job: job)
                                     } label: {
-                                        alertRow(alert)
+                                        JobSummaryRow(job: job)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(.vertical, 14)
                                     }
                                     .buttonStyle(.plain)
-                                }
 
-                                if alert.id != marginAlerts.prefix(3).last?.id {
-                                    Divider()
-                                        .padding(.leading, 44)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
-                    }
-
-                    if subscriptions.isUnlocked(.marginAlerts) {
-                        notificationPermissionRow
-                    }
-                }
-
-                dashboardSection("Active jobs") {
-                    if activeJobs.isEmpty {
-                        ContentUnavailableView {
-                            Label("No active jobs", systemImage: "hammer")
-                        } description: {
-                            Text("Create a job from History to start tracking its budget.")
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                    } else {
-                        VStack(spacing: 0) {
-                            ForEach(activeJobs) { job in
-                                NavigationLink {
-                                    JobDetailView(job: job)
-                                } label: {
-                                    JobSummaryRow(job: job)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.vertical, 14)
-                                }
-                                .buttonStyle(.plain)
-
-                                if job.id != activeJobs.last?.id {
-                                    Divider()
+                                    if job.id != activeJobs.last?.id {
+                                        Divider()
+                                    }
                                 }
                             }
+                            .padding(.horizontal, 16)
+                            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
                         }
-                        .padding(.horizontal, 16)
-                        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
                     }
                 }
             }
@@ -122,7 +150,56 @@ struct DashboardView: View {
             guard subscriptions.isUnlocked(.marginAlerts) else { return }
             await notificationService.refreshAndSync(alerts: marginAlerts)
         }
-        .proPaywall(for: $paywallFeature)
+        .sheet(isPresented: $isCreatingJob) {
+            CreateJobView(source: .dashboardEmptyState)
+        }
+        .proPaywall(for: $paywallFeature) { feature in
+            // Buying Pro because the job limit was reached should open the
+            // create sheet, not return to the button that was blocked.
+            if feature == .unlimitedJobs { isCreatingJob = true }
+        }
+    }
+
+    /// The whole dashboard on a brand new account.
+    ///
+    /// What used to render here was a portfolio card reading zero across zero
+    /// jobs, a locked-feature upsell for alerts with nothing to watch, and —
+    /// below the fold, under the tab bar — the one thing that matters. Three
+    /// blocks of chrome ahead of the only available action is an attention
+    /// hierarchy pointing away from activation, and selling a Pro feature to
+    /// someone who has not yet tracked anything asks before any value has
+    /// arrived. Both come back the moment there is a first job to describe.
+    private var firstRunInvitation: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Image(systemName: "hammer.fill")
+                .font(.largeTitle)
+                .foregroundStyle(.tint)
+                .accessibilityHidden(true)
+
+            Text("Track your first job")
+                .font(.title.bold())
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+
+            Text("Add what you're charging and what you expect it to cost. MarginRun tracks the margin from there, and tells you when a job starts eating it.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                startCreatingJob()
+            } label: {
+                Text("Create Job")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 28)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .padding(.top, 8)
+            .accessibilityIdentifier("dashboardCreateJobButton")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 12)
     }
 
     /// Re-runs when the alert set changes *or* when Pro is gained or lost, so a

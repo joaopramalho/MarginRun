@@ -77,14 +77,22 @@ struct AnalyticsServiceTests {
         let harness = try makeHarness()
         defer { harness.tearDown() }
 
-        harness.service.track(.expenseAdded(category: .materials, hasReceipt: false))
+        harness.service.track(.expenseAdded(
+            category: .materials,
+            hasReceipt: false,
+            source: .jobDetailQuickExpense
+        ))
 
         // A second service over the same storage stands in for a relaunch.
         let relaunched = AnalyticsService(
             backend: harness.backend,
             milestones: AnalyticsMilestones(defaults: harness.defaults)
         )
-        relaunched.track(.expenseAdded(category: .labor, hasReceipt: true))
+        relaunched.track(.expenseAdded(
+            category: .labor,
+            hasReceipt: true,
+            source: .jobCreationFollowUp
+        ))
 
         #expect(harness.backend.recordedNames.filter { $0 == "first_expense_added" }.count == 1)
     }
@@ -96,7 +104,11 @@ struct AnalyticsServiceTests {
         harness.service.track(
             .jobCreated(source: .history, hasCostEstimate: true, meetsTargetMargin: true)
         )
-        harness.service.track(.expenseAdded(category: .materials, hasReceipt: true))
+        harness.service.track(.expenseAdded(
+            category: .materials,
+            hasReceipt: true,
+            source: .jobDetailQuickExpense
+        ))
         harness.service.track(.laborAdded(source: .timer))
         harness.service.track(.receiptAttached(source: .camera))
 
@@ -173,17 +185,18 @@ struct AnalyticsServiceTests {
         let harness = try makeHarness()
         defer { harness.tearDown() }
 
-        harness.service.track(.paywallViewed(feature: .laborTimer))
+        harness.service.track(.paywallViewed(feature: .laborTimer, source: .native))
         let properties = try #require(harness.backend.properties(for: "paywall_viewed"))
 
         #expect(properties["paywall_context"] == .string("labor_timer"))
+        #expect(properties["paywall_source"] == .string("native"))
     }
 
     @Test func aPaywallWithNoContextIsReportedAsGeneral() throws {
         let harness = try makeHarness()
         defer { harness.tearDown() }
 
-        harness.service.track(.paywallViewed(feature: nil))
+        harness.service.track(.paywallViewed(feature: nil, source: .revenueCat))
 
         #expect(
             harness.backend.properties(for: "paywall_viewed")?["paywall_context"]
@@ -195,11 +208,18 @@ struct AnalyticsServiceTests {
         let harness = try makeHarness()
         defer { harness.tearDown() }
 
-        harness.service.track(.purchaseCompleted(plan: .yearly, feature: .insights))
+        harness.service.track(.purchaseCompleted(
+            plan: .yearly,
+            feature: .insights,
+            source: .revenueCat,
+            kind: .introductoryTrial
+        ))
         let properties = try #require(harness.backend.properties(for: "purchase_completed"))
 
         #expect(properties["plan"] == .string("yearly"))
         #expect(properties["paywall_context"] == .string("insights"))
+        #expect(properties["paywall_source"] == .string("revenuecat"))
+        #expect(properties["purchase_kind"] == .string("introductory_trial"))
     }
 
     /// A restore is not a sale. If these ever collapsed into one event the
@@ -208,9 +228,13 @@ struct AnalyticsServiceTests {
         let harness = try makeHarness()
         defer { harness.tearDown() }
 
-        harness.service.track(.restoreStarted(source: .paywall))
+        harness.service.track(.restoreStarted(source: .paywall, paywallSource: .native))
         harness.service.track(
-            .restoreCompleted(source: .paywall, outcome: .entitlementRestored)
+            .restoreCompleted(
+                source: .paywall,
+                paywallSource: .native,
+                outcome: .entitlementRestored
+            )
         )
 
         #expect(harness.backend.recordedNames == ["restore_started", "restore_completed"])
@@ -273,6 +297,7 @@ struct AnalyticsServiceTests {
                 "app_first_open",
                 "onboarding_started", "onboarding_completed", "onboarding_skipped",
                 "first_job_created", "job_created",
+                "quick_expense_opened",
                 "first_expense_added", "expense_added",
                 "first_labor_added", "labor_added",
                 "first_receipt_attached", "receipt_attached",
@@ -282,9 +307,11 @@ struct AnalyticsServiceTests {
                 "labor_live_activity_opened", "labor_live_activity_ended",
                 "job_completed", "insights_opened",
                 "paywall_viewed", "plan_selected",
-                "purchase_started", "purchase_completed",
+                "purchase_started", "trial_started", "purchase_completed",
                 "purchase_cancelled", "purchase_failed",
                 "restore_started", "restore_completed",
+                "offer_code_redemption_opened", "offer_code_redemption_succeeded",
+                "offer_code_redemption_failed",
                 "pro_feature_attempted",
             ]
         )
@@ -299,6 +326,7 @@ struct AnalyticsServiceTests {
             "app_first_open",
             "onboarding_started", "onboarding_completed", "onboarding_skipped",
             "first_job_created", "job_created",
+            "quick_expense_opened",
             "first_expense_added", "expense_added",
             "first_labor_added", "labor_added",
             "first_receipt_attached", "receipt_attached",
@@ -309,9 +337,11 @@ struct AnalyticsServiceTests {
             "job_completed", "insights_opened",
             "paywall_viewed",
             "plan_selected",
-            "purchase_started", "purchase_completed",
+            "purchase_started", "trial_started", "purchase_completed",
             "purchase_cancelled", "purchase_failed",
             "restore_started", "restore_completed",
+            "offer_code_redemption_opened", "offer_code_redemption_succeeded",
+            "offer_code_redemption_failed",
             "pro_feature_attempted",
         ]
 
@@ -385,12 +415,20 @@ enum AnalyticsEventCatalog {
             .laborTimerCompleted(durationBucket: "1-4h"),
             .jobCompleted(metTargetMargin: false, beatExpectedProfit: false),
             .insightsOpened,
-            .paywallViewed(feature: nil),
+            .paywallViewed(feature: nil, source: .native),
+            .quickExpenseOpened,
+            .offerCodeRedemptionOpened(source: .settings),
+            .offerCodeRedemptionSucceeded(source: .nativePaywall),
+            .offerCodeRedemptionFailed(source: .settings, reason: .network),
         ]
 
         events += OnboardingStep.allCases.map { AnalyticsEvent.onboardingSkipped(step: $0) }
         events += ExpenseCategory.allCases.map {
-            AnalyticsEvent.expenseAdded(category: $0, hasReceipt: true)
+            AnalyticsEvent.expenseAdded(
+                category: $0,
+                hasReceipt: true,
+                source: .jobDetailQuickExpense
+            )
         }
         events += [JobCreationSource.onboarding, .history, .historyEmptyState].map {
             AnalyticsEvent.jobCreated(source: $0, hasCostEstimate: true, meetsTargetMargin: true)
@@ -418,20 +456,50 @@ enum AnalyticsEventCatalog {
         events += ProFeature.allCases.map { AnalyticsEvent.proFeatureAttempted(feature: $0) }
         events += ProFeature.allCases.flatMap { feature -> [AnalyticsEvent] in
             [
-                .paywallViewed(feature: feature),
-                .paywallPlanSelected(plan: .yearly, feature: feature),
-                .purchaseStarted(plan: .monthly, feature: feature),
-                .purchaseCompleted(plan: .yearly, feature: feature),
-                .purchaseCancelled(plan: .other, feature: feature),
-                .purchaseFailed(plan: .other, feature: feature, reason: .network),
+                .paywallViewed(feature: feature, source: .native),
+                .paywallPlanSelected(plan: .yearly, feature: feature, source: .native),
+                .purchaseStarted(
+                    plan: .monthly,
+                    feature: feature,
+                    source: .native,
+                    kind: .paid
+                ),
+                .trialStarted(plan: .yearly, feature: feature, source: .revenueCat),
+                .purchaseCompleted(
+                    plan: .yearly,
+                    feature: feature,
+                    source: .revenueCat,
+                    kind: .introductoryTrial
+                ),
+                .purchaseCancelled(
+                    plan: .other,
+                    feature: feature,
+                    source: .native,
+                    kind: .paid
+                ),
+                .purchaseFailed(
+                    plan: .other,
+                    feature: feature,
+                    source: .native,
+                    kind: .paid,
+                    reason: .network
+                ),
             ]
         }
         events += [RestoreSource.paywall, .proGate, .settings].flatMap { source -> [AnalyticsEvent] in
             [
-                .restoreStarted(source: source),
-                .restoreCompleted(source: source, outcome: .entitlementRestored),
-                .restoreCompleted(source: source, outcome: .nothingToRestore),
-                .restoreCompleted(source: source, outcome: .failed),
+                .restoreStarted(source: source, paywallSource: .native),
+                .restoreCompleted(
+                    source: source,
+                    paywallSource: .native,
+                    outcome: .entitlementRestored
+                ),
+                .restoreCompleted(
+                    source: source,
+                    paywallSource: .revenueCat,
+                    outcome: .nothingToRestore
+                ),
+                .restoreCompleted(source: source, paywallSource: nil, outcome: .failed),
             ]
         }
 
