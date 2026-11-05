@@ -86,4 +86,4 @@ See [ROADMAP.md](ROADMAP.md) for proposed technical improvements. Items are prop
 
 ## License
 
-No license has been selected for this repository. All rights remain with their respective owner(s); no permission to use, modify, or redistribute the app is granted by this repository. A license requires approval from the rights holder. See [BYOP_READINESS.md](BYOP_READINESS.md) for the publication and BYOP implications.
+No license has been selected for this repository. All rights remain with their respective owner(s); no permission to use, modify, or redistribute the app is granted by this repository. A license requires approval from the rights holder.
