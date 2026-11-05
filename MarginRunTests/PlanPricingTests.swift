@@ -67,9 +67,12 @@ struct TrialOfferTests {
 
         #expect(plan.trial?.duration == "7 days")
         #expect(plan.trial?.renewalLine == "Then $99.99/year")
-        #expect(plan.trial?.reassuranceHeadline == "Try every Pro feature free for 7 days")
-        #expect(plan.trial?.reassuranceDetail == "Then $99.99/year. Cancel anytime.")
-        #expect(plan.terms.contains("7 days free, then $99.99/year"))
+        #expect(plan.trial?.callToAction == "Start 7-Day Free Trial")
+        #expect(plan.purchaseButtonTitle == "Start 7-Day Free Trial")
+        #expect(
+            plan.terms
+                == "7 days free, then $99.99/year. Renews automatically until cancelled."
+        )
     }
 
     @Test(arguments: [IntroEligibilityStatus.ineligible, .unknown])
@@ -83,6 +86,7 @@ struct TrialOfferTests {
         let plan = try #require(options.first(where: { $0.analyticsPlan == .yearly }))
 
         #expect(plan.trial == nil)
+        #expect(plan.purchaseButtonTitle == "Continue with Yearly")
         #expect(plan.terms == "Renews yearly until cancelled.")
     }
 
@@ -96,6 +100,7 @@ struct TrialOfferTests {
         let plan = try #require(options.first(where: { $0.analyticsPlan == .monthly }))
 
         #expect(plan.trial == nil)
+        #expect(plan.purchaseButtonTitle == "Continue with Monthly")
         #expect(plan.terms == "Renews monthly until cancelled.")
     }
 }

@@ -23,7 +23,8 @@ struct ProductAnalyticsIntegrationTests {
         let backend = RecordingAnalyticsBackend()
         let service = AnalyticsService(
             backend: backend,
-            milestones: AnalyticsMilestones(defaults: defaults)
+            milestones: AnalyticsMilestones(defaults: defaults),
+            currencyCode: { "USD" }
         )
         return Harness(
             service: service,
@@ -43,12 +44,21 @@ struct ProductAnalyticsIntegrationTests {
         draft.materialsText = "6200"
         let job = try #require(draft.makeJob())
 
-        harness.service.trackJobCreated(source: .history, financials: job.financials)
+        harness.service.trackJobCreated(
+            source: .history,
+            quotedValue: job.contractValue,
+            financials: job.financials
+        )
 
         #expect(harness.backend.recordedNames == ["first_job_created", "job_created"])
         let properties = try #require(harness.backend.properties(for: "job_created"))
         #expect(properties["source"] == .string("history"))
+        #expect(properties["creation_origin"] == .string("history"))
         #expect(properties["has_cost_estimate"] == .bool(true))
+        #expect(properties["currency"] == .string("USD"))
+        #expect(properties["quoted_value_bucket"] == .string("10k_25k"))
+        #expect(properties["quoted_value_rounded"] == .int(18_000))
+        #expect(properties.values.contains(.int(18_400)) == false)
         #expect(properties.values.contains(.string("Private job name")) == false)
     }
 
@@ -87,7 +97,7 @@ struct ProductAnalyticsIntegrationTests {
         let job = Job(
             name: "Private completed job",
             customerName: "Private customer",
-            contractValue: 10_000,
+            contractValue: 10_437,
             targetMargin: 30,
             estimatedMaterials: 4_000,
             estimatedLabor: 1_000,
@@ -103,6 +113,12 @@ struct ProductAnalyticsIntegrationTests {
         let properties = try #require(harness.backend.properties(for: "job_completed"))
         #expect(properties["met_target_margin"] == .bool(true))
         #expect(properties["beat_expected_profit"] == .bool(true))
+        #expect(properties["currency"] == .string("USD"))
+        #expect(properties["final_value_bucket"] == .string("10k_25k"))
+        #expect(properties["final_value_rounded"] == .int(10_000))
+        #expect(properties.values.contains(.int(10_437)) == false)
+        #expect(properties.values.contains(.string("Private completed job")) == false)
+        #expect(properties.values.contains(.string("Private customer")) == false)
     }
 
     @Test func onePaywallPresentationEmitsOneViewWithTheTypedContext() throws {

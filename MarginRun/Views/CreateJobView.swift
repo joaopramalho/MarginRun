@@ -218,7 +218,11 @@ struct CreateJobView: View {
             return
         }
 
-        analytics.trackJobCreated(source: source, financials: financials)
+        analytics.trackJobCreated(
+            source: source,
+            quotedValue: job.contractValue,
+            financials: job.financials
+        )
         withAnimation(.snappy(duration: 0.3)) {
             createdJob = job
         }

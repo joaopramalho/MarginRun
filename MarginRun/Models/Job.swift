@@ -17,6 +17,11 @@ final class Job {
     var createdAt: Date
     var completedAt: Date?
 
+    /// Persisted locally so reopening and completing the same job cannot emit
+    /// a second aggregate `job_completed` value. This is analytics lifecycle
+    /// state only; it never grants access or changes the job's financials.
+    var hasReportedCompletionAnalytics: Bool = false
+
     // Finalized jobs read from this snapshot instead of recalculating their
     // result from mutable estimates or cost relationships.
     var completionContractValue: Decimal?
@@ -83,6 +88,7 @@ final class Job {
         self.statusRaw = status.rawValue
         self.createdAt = createdAt
         self.completedAt = completedAt
+        self.hasReportedCompletionAnalytics = false
         self.completionContractValue = nil
         self.completionTotalRevenue = nil
         self.completionTargetMargin = nil
@@ -238,6 +244,17 @@ final class Job {
         completionActualOther = final.otherActual
         status = .completed
         completedAt = date
+    }
+
+    /// Claims the one completion analytics emission for this job.
+    ///
+    /// The flag intentionally survives ``discardCompletion()``. A reopen edits
+    /// the same job lifecycle; it does not create another completed job for
+    /// aggregate reporting.
+    func markCompletionAnalyticsReportedIfNeeded() -> Bool {
+        guard status == .completed, !hasReportedCompletionAnalytics else { return false }
+        hasReportedCompletionAnalytics = true
+        return true
     }
 
     func discardCompletion() {

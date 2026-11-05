@@ -58,6 +58,21 @@ nonisolated enum ProFeature: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// Names the outcome behind the gate instead of presenting every surface
+    /// as the same generic upgrade. The paywall still comes first, so these
+    /// labels describe what the customer is exploring rather than pretending
+    /// the locked action has already happened.
+    var upgradeActionTitle: String {
+        switch self {
+        case .unlimitedJobs: "Explore Unlimited Jobs"
+        case .receiptScan: "Explore Receipt Scanning"
+        case .laborTimer: "Explore Labor Timer"
+        case .insights: "Explore Profit Insights"
+        case .marginAlerts: "Explore Margin Alerts"
+        case .extraRevenue: "Explore Change Orders"
+        }
+    }
+
     /// This capability stated as a benefit, for the paywall's feature rows.
     var benefit: ProBenefit {
         switch self {
@@ -65,7 +80,7 @@ nonisolated enum ProFeature: String, CaseIterable, Identifiable, Sendable {
             ProBenefit(
                 systemImage: systemImage,
                 title: "Unlimited active jobs",
-                outcome: "Run the whole season, not just \(FreePlanLimits.maxActiveJobs) jobs."
+                outcome: "Run unlimited jobs at the same time."
             )
         case .receiptScan:
             ProBenefit(
@@ -111,16 +126,28 @@ nonisolated enum ProPitch {
     /// where nothing was interrupted.
     static let generalOrder: [ProFeature] = [.unlimitedJobs, .receiptScan, .insights]
 
-    /// What fills the remaining rows behind whichever capability was gated.
-    static let supportingOrder: [ProFeature] = [.receiptScan, .insights, .laborTimer, .unlimitedJobs]
-
     /// The rows to show when the paywall was raised by `feature`.
     ///
     /// The capability the customer just reached for always leads — the rest is
     /// context for a decision they have already started making. Derived rather
     /// than hand-written per feature so six lists cannot drift apart.
     static func benefits(for feature: ProFeature?) -> [ProBenefit] {
-        let candidates = feature.map { [$0] + supportingOrder } ?? generalOrder
+        let candidates: [ProFeature] = switch feature {
+        case .unlimitedJobs:
+            [.unlimitedJobs, .insights, .receiptScan]
+        case .receiptScan:
+            [.receiptScan, .unlimitedJobs, .insights]
+        case .laborTimer:
+            [.laborTimer, .receiptScan, .insights]
+        case .insights:
+            [.insights, .unlimitedJobs, .receiptScan]
+        case .marginAlerts:
+            [.marginAlerts, .unlimitedJobs, .receiptScan]
+        case .extraRevenue:
+            [.extraRevenue, .insights, .receiptScan]
+        case nil:
+            generalOrder
+        }
 
         var rows: [ProBenefit] = []
         var seen: Set<String> = []

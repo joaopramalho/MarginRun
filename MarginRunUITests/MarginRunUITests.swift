@@ -637,6 +637,53 @@ final class MarginRunUITests: XCTestCase {
 
     // MARK: - Paywall
 
+    /// The free allowance is stated before it becomes a blocker, while the
+    /// persistent Settings route keeps Pro discoverable without interrupting
+    /// normal work.
+    @MainActor
+    func testFreePlanExplainsTheRemainingJobSlotAndKeepsProInSettings() throws {
+        let app = launchUsedInstall()
+
+        app.tabBars.buttons["History"].tap()
+        XCTAssertTrue(
+            app.staticTexts["1 free active job slot remaining"].waitForExistence(timeout: 5)
+        )
+        XCTAssertFalse(
+            app.buttons["freePlanSlotUpsell"].exists,
+            "The upgrade action should appear only once the free slots are exhausted"
+        )
+
+        app.buttons["createJobButton"].tap()
+        let name = app.textFields["createJobNameField"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText("Second active job")
+
+        let value = app.textFields["createJobContractValueField"]
+        value.tap()
+        value.typeText("5000")
+        dismissKeyboard(in: app)
+
+        let save = app.buttons["createJobSaveButton"].firstMatch
+        XCTAssertTrue(scrollToElement(save, in: app))
+        save.tap()
+        let done = app.buttons["startTrackingDoneButton"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5))
+        done.tap()
+
+        XCTAssertTrue(app.staticTexts["Free active job limit reached"].waitForExistence(timeout: 5))
+        let unlock = app.buttons["freePlanSlotUpsell"]
+        XCTAssertTrue(unlock.exists)
+        XCTAssertEqual(unlock.label, "Unlock Unlimited Jobs")
+        unlock.tap()
+        XCTAssertTrue(app.buttons["paywallCloseButton"].waitForExistence(timeout: 10))
+        app.buttons["paywallCloseButton"].tap()
+
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(scrollToElement(app.buttons["settingsUpgradeButton"], in: app))
+        XCTAssertTrue(scrollToElement(app.buttons["settingsRedeemOfferCodeButton"], in: app))
+    }
+
     @MainActor
     func testSettingsShowsOfferCodeRedemptionAction() throws {
         let app = launchUsedInstall()
@@ -722,23 +769,18 @@ final class MarginRunUITests: XCTestCase {
         XCTAssertTrue(purchase.isHittable, "The CTA must be visible without scrolling")
     }
 
-    /// Eligible customers should understand the trial before tapping purchase,
-    /// without relying on the CTA alone to explain the offer.
+    /// Eligible customers should see the real duration in the primary action,
+    /// without a second banner repeating the same trial offer.
     @MainActor
-    func testEligibleAnnualPlanExplainsTheFreeTrial() throws {
+    func testEligibleAnnualPlanUsesASpecificTrialCTA() throws {
         let app = launchUsedInstall()
 
         openInsightsPaywall(in: app)
 
-        let trialMessage = app.descendants(matching: .any)["paywallTrialMessage"]
-        XCTAssertTrue(
-            trialMessage.waitForExistence(timeout: 10),
-            "The eligible yearly plan should explain its free trial at the decision point"
-        )
-        XCTAssertTrue(
-            trialMessage.label.contains("Try every Pro feature free for 7 days")
-        )
-        XCTAssertTrue(trialMessage.label.contains("Then $99.99/year. Cancel anytime."))
+        let purchase = app.buttons["paywallPurchaseButton"]
+        XCTAssertTrue(purchase.waitForExistence(timeout: 10))
+        XCTAssertEqual(purchase.label, "Start 7-Day Free Trial")
+        XCTAssertFalse(app.descendants(matching: .any)["paywallTrialMessage"].exists)
     }
 
     /// Annual leads and is preselected, and choosing monthly actually moves the
@@ -760,7 +802,9 @@ final class MarginRunUITests: XCTestCase {
 
         XCTAssertTrue(monthly.isSelected, "Tapping monthly should move the selection")
         XCTAssertFalse(yearly.isSelected)
-        XCTAssertTrue(app.buttons["paywallPurchaseButton"].isEnabled)
+        let purchase = app.buttons["paywallPurchaseButton"]
+        XCTAssertTrue(purchase.isEnabled)
+        XCTAssertEqual(purchase.label, "Continue with Monthly")
     }
 
     /// Apple's required controls stay present and reachable, and the paywall is

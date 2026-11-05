@@ -4,8 +4,9 @@ import OSLog
 /// A single value attached to an analytics event.
 ///
 /// Deliberately narrow: strings, whole numbers and flags cover every property
-/// MarginRun sends, and nothing in the case list can carry a receipt image, a
-/// customer name or a dollar amount by accident.
+/// MarginRun sends. Financial analytics is admitted only after a source value
+/// has been coarsely rounded by ``JobValueAnalytics``; free-form customer and
+/// job content has no representation here.
 nonisolated enum AnalyticsValue: Equatable, Sendable, CustomStringConvertible {
     case string(String)
     case int(Int)

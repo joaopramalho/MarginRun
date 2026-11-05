@@ -47,7 +47,12 @@ struct AnalyticsServiceTests {
         defer { harness.tearDown() }
 
         harness.service.track(
-            .jobCreated(source: .onboarding, hasCostEstimate: true, meetsTargetMargin: true)
+            .jobCreated(
+                source: .onboarding,
+                hasCostEstimate: true,
+                meetsTargetMargin: true,
+                value: JobValueAnalytics(value: 18_000, currency: "USD")
+            )
         )
 
         #expect(harness.backend.recordedNames == ["first_job_created", "job_created"])
@@ -60,7 +65,8 @@ struct AnalyticsServiceTests {
         let event = AnalyticsEvent.jobCreated(
             source: .history,
             hasCostEstimate: false,
-            meetsTargetMargin: false
+            meetsTargetMargin: false,
+            value: JobValueAnalytics(value: 900, currency: "BRL")
         )
         harness.service.track(event)
         harness.service.track(event)
@@ -102,7 +108,12 @@ struct AnalyticsServiceTests {
         defer { harness.tearDown() }
 
         harness.service.track(
-            .jobCreated(source: .history, hasCostEstimate: true, meetsTargetMargin: true)
+            .jobCreated(
+                source: .history,
+                hasCostEstimate: true,
+                meetsTargetMargin: true,
+                value: JobValueAnalytics(value: 18_000, currency: "USD")
+            )
         )
         harness.service.track(.expenseAdded(
             category: .materials,
@@ -192,7 +203,7 @@ struct AnalyticsServiceTests {
         #expect(properties["paywall_source"] == .string("native"))
     }
 
-    @Test func aPaywallWithNoContextIsReportedAsGeneral() throws {
+    @Test func aPaywallWithNoFeatureContextIsReportedAsSettings() throws {
         let harness = try makeHarness()
         defer { harness.tearDown() }
 
@@ -200,7 +211,7 @@ struct AnalyticsServiceTests {
 
         #expect(
             harness.backend.properties(for: "paywall_viewed")?["paywall_context"]
-                == .string("general")
+                == .string("settings")
         )
     }
 
@@ -252,7 +263,7 @@ struct AnalyticsServiceTests {
 
         let forbidden = [
             "Chen Residence", "Kitchen remodel", "Home Depot",
-            "Cabinets and hardware", "18000", "$18,000.00",
+            "Cabinets and hardware", "18437", "$18,437.00",
         ]
 
         for event in AnalyticsEventCatalog.everyEvent {
@@ -413,7 +424,11 @@ enum AnalyticsEventCatalog {
             .receiptOCRStarted,
             .receiptOCRCompleted(outcome: .extracted, fieldsExtracted: 3),
             .laborTimerCompleted(durationBucket: "1-4h"),
-            .jobCompleted(metTargetMargin: false, beatExpectedProfit: false),
+            .jobCompleted(
+                metTargetMargin: false,
+                beatExpectedProfit: false,
+                value: JobValueAnalytics(value: 21_400, currency: "USD")
+            ),
             .insightsOpened,
             .paywallViewed(feature: nil, source: .native),
             .quickExpenseOpened,
@@ -431,7 +446,12 @@ enum AnalyticsEventCatalog {
             )
         }
         events += [JobCreationSource.onboarding, .history, .historyEmptyState].map {
-            AnalyticsEvent.jobCreated(source: $0, hasCostEstimate: true, meetsTargetMargin: true)
+            AnalyticsEvent.jobCreated(
+                source: $0,
+                hasCostEstimate: true,
+                meetsTargetMargin: true,
+                value: JobValueAnalytics(value: 18_437, currency: "USD")
+            )
         }
         events += [LaborEntrySource.manual, .timer].map { AnalyticsEvent.laborAdded(source: $0) }
         events += [ReceiptSource.camera, .library].map {

@@ -34,22 +34,42 @@ struct SubscriptionSettingsSection: View {
                     isShowingGeneralPaywall = true
                 } label: {
                     HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: "star.circle.fill")
+                        Image(systemName: "chart.line.uptrend.xyaxis")
                             .font(.title3)
                             .foregroundStyle(.tint)
                             .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Upgrade to MarginRun Pro")
-                                .font(.headline)
-                            Text("Unlimited jobs, receipt scanning, labor timer, alerts & insights.")
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: 8) {
+                                    Text("Know what every job is really making")
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                    ProBadge()
+                                }
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ProBadge()
+                                    Text("Know what every job is really making")
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            Text("Unlimited jobs, faster cost capture, and profit insights.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
+
+                            Text("Explore Pro")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tint)
+                                .padding(.top, 3)
                         }
                     }
                     .padding(.vertical, 4)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Explore MarginRun Pro")
+                .accessibilityHint("Opens subscription plans")
                 .accessibilityIdentifier("settingsUpgradeButton")
 
                 Button("Restore Purchases") {

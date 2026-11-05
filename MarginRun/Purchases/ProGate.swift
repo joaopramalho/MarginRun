@@ -25,6 +25,7 @@ struct ProGate<Content: View, Teaser: View>: View {
                 title: title ?? feature.headline,
                 message: message ?? feature.subheadline,
                 systemImage: feature.systemImage,
+                actionTitle: feature.upgradeActionTitle,
                 teaser: teaser,
                 // Through `requirePro` rather than setting the binding, so the
                 // locked screen reports `pro_feature_attempted` like every
@@ -62,6 +63,7 @@ private struct ProLockedView<Teaser: View>: View {
     let title: String
     let message: String
     let systemImage: String
+    let actionTitle: String
     @ViewBuilder let teaser: () -> Teaser
     let unlock: () -> Void
 
@@ -71,6 +73,8 @@ private struct ProLockedView<Teaser: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 10) {
+                    ProBadge()
+
                     Image(systemName: systemImage)
                         .font(.largeTitle)
                         .foregroundStyle(.tint)
@@ -90,8 +94,10 @@ private struct ProLockedView<Teaser: View>: View {
 
                 VStack(spacing: 10) {
                     Button(action: unlock) {
-                        Text("Unlock MarginRun Pro")
+                        Text(actionTitle)
                             .font(.headline)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                             .frame(maxWidth: .infinity, minHeight: 28)
                     }
                     .buttonStyle(.borderedProminent)
@@ -170,14 +176,33 @@ struct ProUpsellRow: View {
                 }
 
                 Spacer(minLength: 8)
-
-                Image(systemName: "lock.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
+                ProBadge()
             }
             .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// One compact, native marker for every Pro surface. The surrounding control
+/// carries the full VoiceOver label and hint, so the visual badge does not add
+/// a stray repeated "Pro" to combined elements.
+struct ProBadge: View {
+    var onProminentBackground = false
+
+    var body: some View {
+        Text("PRO")
+            .font(.caption2.weight(.bold))
+            .kerning(0.6)
+            .foregroundStyle(onProminentBackground ? Color.white : Color.accentColor)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                onProminentBackground
+                    ? Color.white.opacity(0.2)
+                    : Color.accentColor.opacity(0.12),
+                in: Capsule()
+            )
+            .accessibilityHidden(true)
     }
 }

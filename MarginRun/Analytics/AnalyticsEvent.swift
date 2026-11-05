@@ -184,7 +184,12 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
     case onboardingSkipped(step: OnboardingStep)
 
     // Activation
-    case jobCreated(source: JobCreationSource, hasCostEstimate: Bool, meetsTargetMargin: Bool)
+    case jobCreated(
+        source: JobCreationSource,
+        hasCostEstimate: Bool,
+        meetsTargetMargin: Bool,
+        value: JobValueAnalytics
+    )
     case quickExpenseOpened
     case expenseAdded(category: ExpenseCategory, hasReceipt: Bool, source: ExpenseCreationSource)
     case laborAdded(source: LaborEntrySource)
@@ -200,7 +205,11 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
     case jobEdited(changedContractValue: Bool, changedEstimate: Bool)
     case jobDeleted(status: JobStatus, hadCosts: Bool)
     case jobReopened
-    case jobCompleted(metTargetMargin: Bool, beatExpectedProfit: Bool)
+    case jobCompleted(
+        metTargetMargin: Bool,
+        beatExpectedProfit: Bool,
+        value: JobValueAnalytics
+    )
     case insightsOpened
 
     // Monetization
@@ -318,11 +327,15 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
         case let .onboardingSkipped(step):
             return ["step": .string(step.rawValue)]
 
-        case let .jobCreated(source, hasCostEstimate, meetsTargetMargin):
+        case let .jobCreated(source, hasCostEstimate, meetsTargetMargin, value):
             return [
                 "source": .string(source.rawValue),
+                "creation_origin": .string(source.rawValue),
                 "has_cost_estimate": .bool(hasCostEstimate),
                 "meets_target_margin": .bool(meetsTargetMargin),
+                "currency": .string(value.currency),
+                "quoted_value_bucket": .string(value.bucket.rawValue),
+                "quoted_value_rounded": .int(value.roundedValue),
             ]
 
         case let .expenseAdded(category, hasReceipt, source):
@@ -374,10 +387,13 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
                 "had_costs": .bool(hadCosts),
             ]
 
-        case let .jobCompleted(metTargetMargin, beatExpectedProfit):
+        case let .jobCompleted(metTargetMargin, beatExpectedProfit, value):
             return [
                 "met_target_margin": .bool(metTargetMargin),
                 "beat_expected_profit": .bool(beatExpectedProfit),
+                "currency": .string(value.currency),
+                "final_value_bucket": .string(value.bucket.rawValue),
+                "final_value_rounded": .int(value.roundedValue),
             ]
 
         case let .paywallViewed(feature, source):
@@ -429,7 +445,10 @@ nonisolated enum AnalyticsEvent: Equatable, Sendable {
     /// purchase intent is the whole reason the paywall is contextual, so this
     /// is the one property the monetization funnel cannot lose.
     static func context(for feature: ProFeature?) -> String {
-        feature?.analyticsName ?? "general"
+        // Settings is currently the only intentional, non-feature paywall
+        // entry point. Naming it makes low-intent exploration comparable with
+        // contextual gates without adding a second analytics model.
+        feature?.analyticsName ?? "settings"
     }
 
     private static func paywallProperties(

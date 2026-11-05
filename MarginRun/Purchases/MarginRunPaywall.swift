@@ -188,7 +188,6 @@ struct MarginRunPaywall: View {
     ) -> some View {
         VStack(spacing: 12) {
             planPicker(plans: plans, selected: selected)
-            trialMessage(for: selected)
             purchaseButton(offering: offering, selected: selected)
 
             VStack(spacing: 8) {
@@ -230,39 +229,6 @@ struct MarginRunPaywall: View {
         }
     }
 
-    /// Makes the trial feel concrete at the decision point: value now, exact
-    /// renewal terms next. It only exists for an eligible StoreKit offer, so an
-    /// ineligible customer never sees a promise the App Store cannot honor.
-    @ViewBuilder
-    private func trialMessage(for plan: PlanOption?) -> some View {
-        if let trial = plan?.trial {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.tint)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(trial.reassuranceHeadline)
-                        .font(.subheadline.weight(.semibold))
-                    Text(trial.reassuranceDetail)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("paywallTrialMessage")
-            .transition(.opacity.combined(with: .move(edge: .bottom)))
-        }
-    }
-
     private func purchaseButton(offering: Offering, selected: PlanOption?) -> some View {
         Button {
             guard let selected, let package = package(for: selected, in: offering) else { return }
@@ -280,8 +246,10 @@ struct MarginRunPaywall: View {
                 if store.isPurchasing {
                     ProgressView()
                 } else {
-                    Text(selected?.trial == nil ? "Start MarginRun Pro" : "Start Free Trial")
+                    Text(selected?.purchaseButtonTitle ?? "Continue")
                         .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 30)
@@ -354,6 +322,8 @@ struct MarginRunPaywall: View {
     private func disclosure(for plan: PlanOption?) -> String {
         guard let plan else { return "" }
         guard plan.periodSuffix != nil else { return plan.terms }
+
+        if plan.trial != nil { return plan.terms }
 
         return """
         \(plan.terms) Payment is charged to your Apple Account at confirmation. \

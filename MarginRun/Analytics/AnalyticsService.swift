@@ -24,7 +24,7 @@ nonisolated struct AnalyticsContext: Equatable, Sendable {
 /// hold at this boundary:
 ///
 /// - **Nothing private leaves.** ``AnalyticsEvent`` has no case that can carry
-///   user-entered text or a dollar amount; see its file comment.
+///   user-entered text or an exact financial value; see its file comment.
 /// - **Nothing blocks.** ``AnalyticsBackend/record(_:)`` cannot throw and is
 ///   contractually non-blocking, and every call here is wrapped so a
 ///   misbehaving backend still cannot take a financial code path down with it.
@@ -35,6 +35,7 @@ final class AnalyticsService: ObservableObject {
     private let backend: AnalyticsBackend
     private let milestones: AnalyticsMilestones
     private let now: () -> Date
+    private let currencyCode: () -> String
 
     /// Ambient state attached to every event.
     ///
@@ -47,11 +48,13 @@ final class AnalyticsService: ObservableObject {
     init(
         backend: AnalyticsBackend = OSLogAnalyticsBackend(),
         milestones: AnalyticsMilestones = AnalyticsMilestones(),
-        now: @escaping () -> Date = { .now }
+        now: @escaping () -> Date = { .now },
+        currencyCode: @escaping () -> String = { JobValueAnalytics.currencyCode() }
     ) {
         self.backend = backend
         self.milestones = milestones
         self.now = now
+        self.currencyCode = currencyCode
     }
 
     /// Records `event`, plus its once-per-install companion the first time.
@@ -78,11 +81,16 @@ final class AnalyticsService: ObservableObject {
     /// These helpers are called only after the matching SwiftData save
     /// succeeds. Keeping the event construction here makes the behavior easy
     /// to test without coupling a view test to a live analytics provider.
-    func trackJobCreated(source: JobCreationSource, financials: JobFinancials) {
+    func trackJobCreated(
+        source: JobCreationSource,
+        quotedValue: Decimal,
+        financials: JobFinancials
+    ) {
         track(.jobCreated(
             source: source,
             hasCostEstimate: financials.estimatedTotalCost > 0,
-            meetsTargetMargin: !financials.isExpectedMarginBelowTarget
+            meetsTargetMargin: !financials.isExpectedMarginBelowTarget,
+            value: JobValueAnalytics(value: quotedValue, currency: currencyCode())
         ))
     }
 
@@ -101,7 +109,8 @@ final class AnalyticsService: ObservableObject {
     func trackJobCompleted(report: JobCompletionReport) {
         track(.jobCompleted(
             metTargetMargin: !report.isBelowTargetMargin,
-            beatExpectedProfit: report.profitVariance >= 0
+            beatExpectedProfit: report.profitVariance >= 0,
+            value: JobValueAnalytics(value: report.totalRevenue, currency: currencyCode())
         ))
     }
 

@@ -373,9 +373,16 @@ struct JobDetailView: View {
                 Button {
                     startOrShowTimer()
                 } label: {
-                    Label(timerButtonTitle, systemImage: "timer")
-                        .fontWeight(.medium)
+                    HStack(spacing: 8) {
+                        Label(timerButtonTitle, systemImage: "timer")
+                        if laborTimer.session == nil, !subscriptions.isPro { ProBadge() }
+                    }
+                    .fontWeight(.medium)
                 }
+                .accessibilityLabel(timerButtonTitle)
+                .accessibilityHint(laborTimer.session == nil && !subscriptions.isPro
+                    ? "Requires MarginRun Pro and opens subscription plans"
+                    : "Opens the labor timer")
             }
         } header: {
             Text("Labor")
@@ -407,6 +414,9 @@ struct JobDetailView: View {
                             extraRevenueRow(extraRevenue)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityHint(subscriptions.isPro
+                            ? "Opens this extra revenue item"
+                            : "Editing requires MarginRun Pro and opens subscription plans")
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button("Delete", role: .destructive) {
                                 deleteExtraRevenue(extraRevenue)
@@ -426,15 +436,31 @@ struct JobDetailView: View {
                     ) else { return }
                     isAddingExtraRevenue = true
                 } label: {
-                    Label("Add Extra Revenue", systemImage: "plus.circle")
-                        .fontWeight(.medium)
+                    HStack(spacing: 8) {
+                        Label("Add Extra Revenue", systemImage: "plus.circle")
+                        if !subscriptions.isPro { ProBadge() }
+                    }
+                    .fontWeight(.medium)
                 }
+                .accessibilityLabel("Add Extra Revenue")
+                .accessibilityHint(subscriptions.isPro
+                    ? "Opens the extra revenue form"
+                    : "Requires MarginRun Pro and opens subscription plans")
             }
         } header: {
             Text("Extra revenue")
         } footer: {
             if !job.extraRevenues.isEmpty {
-                Text("Approved \(MoneyFormat.usd(financials.extraRevenue)) · Projected margin \(MoneyFormat.percent(ratio: financials.projectedMargin))")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Approved \(MoneyFormat.usd(financials.extraRevenue)) · Projected margin \(MoneyFormat.percent(ratio: financials.projectedMargin))")
+
+                    if job.status == .active, !subscriptions.isPro {
+                        HStack(spacing: 6) {
+                            ProBadge()
+                            Text("Editing change orders requires Pro")
+                        }
+                    }
+                }
             }
         }
     }
@@ -469,6 +495,7 @@ struct JobDetailView: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())
@@ -772,18 +799,21 @@ struct JobDetailView: View {
             return
         }
         job.complete()
+        let shouldReportCompletion = job.markCompletionAnalyticsReportedIfNeeded()
         do {
             try modelContext.save()
         } catch {
             job.discardCompletion()
+            if shouldReportCompletion {
+                job.hasReportedCompletionAnalytics = false
+            }
             completionErrorMessage = "We couldn’t save the final result. Please try again."
             return
         }
 
-        // Read from the frozen completion report, and reported as two flags
-        // rather than as the amounts behind them.
-        let report = job.completionReport
-        analytics.trackJobCompleted(report: report)
+        if shouldReportCompletion {
+            analytics.trackJobCompleted(report: job.completionReport)
+        }
     }
 
     /// Names what goes with the job, so the confirmation is a decision rather
@@ -832,12 +862,18 @@ struct JobDetailView: View {
     /// snapshot is discarded rather than kept, because a stored result that no
     /// longer matches the costs underneath it is worse than no result.
     private func reopenJob() {
+        let hadReportedCompletion = job.hasReportedCompletionAnalytics
+        // A completed job from an older app version may predate the persisted
+        // marker. Treat its existing completion as consumed before reopening,
+        // so completing that same lifecycle again never inflates totals.
+        _ = job.markCompletionAnalyticsReportedIfNeeded()
         job.discardCompletion()
 
         do {
             try modelContext.save()
         } catch {
             job.complete()
+            job.hasReportedCompletionAnalytics = hadReportedCompletion
             completionErrorMessage = "We couldn’t reopen this job. Please try again."
             return
         }

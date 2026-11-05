@@ -113,24 +113,54 @@ struct JobsListView: View {
         if !subscriptions.isPro, selectedFilter == .active, searchText.isEmpty {
             let limit = FreePlanLimits.maxActiveJobs
             let isAtLimit = activeJobCount >= limit
+            let remaining = max(0, limit - activeJobCount)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("\(min(activeJobCount, limit)) of \(limit) active job slots used")
-                    .foregroundStyle(isAtLimit ? Color.orange : Color.secondary)
-
+            Group {
                 if isAtLimit {
-                    Button("Complete a job to free a slot, or go Pro for unlimited active jobs.") {
-                        subscriptions.requirePro(.unlimitedJobs, presenting: $paywallFeature)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(slotMessage(remaining: remaining, limit: limit))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+
+                        Text("Complete an active job to free a slot.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Button {
+                            subscriptions.requirePro(.unlimitedJobs, presenting: $paywallFeature)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text("Unlock Unlimited Jobs")
+                                ProBadge()
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.tint)
+                        .fontWeight(.semibold)
+                        .multilineTextAlignment(.leading)
+                        .accessibilityLabel("Unlock Unlimited Jobs")
+                        .accessibilityHint("Opens MarginRun Pro plans")
+                        .accessibilityIdentifier("freePlanSlotUpsell")
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.tint)
-                    .multilineTextAlignment(.leading)
-                    .accessibilityIdentifier("freePlanSlotUpsell")
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        Color.secondary.opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                } else {
+                    Text(slotMessage(remaining: remaining, limit: limit))
+                        .foregroundStyle(.secondary)
                 }
             }
-            .padding(.top, 2)
             .accessibilityIdentifier("freePlanSlotMeter")
         }
+    }
+
+    private func slotMessage(remaining: Int, limit: Int) -> String {
+        if remaining == 0 { return "Free active job limit reached" }
+        if remaining == 1 { return "1 free active job slot remaining" }
+        return "Free includes \(limit) active job slots"
     }
 
     private var emptyStateTitle: String {

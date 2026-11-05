@@ -14,6 +14,7 @@ struct ProFeatureCopyTests {
             #expect(!feature.systemImage.isEmpty, "missing symbol for \(feature.rawValue)")
             #expect(!feature.benefit.title.isEmpty, "missing benefit for \(feature.rawValue)")
             #expect(!feature.benefit.outcome.isEmpty, "missing outcome for \(feature.rawValue)")
+            #expect(feature.upgradeActionTitle.hasPrefix("Explore "))
         }
     }
 
@@ -90,6 +91,24 @@ struct ProFeatureCopyTests {
                 "Margin alerts & insights",
             ]
         )
+    }
+
+    @Test func coreContextsPrioritizeTheCustomersIntent() {
+        #expect(ProPitch.benefits(for: .insights).map(\.title) == [
+            "Margin alerts & insights",
+            "Unlimited active jobs",
+            "Automatic receipt scanning",
+        ])
+        #expect(ProPitch.benefits(for: .unlimitedJobs).map(\.title) == [
+            "Unlimited active jobs",
+            "Margin alerts & insights",
+            "Automatic receipt scanning",
+        ])
+        #expect(ProPitch.benefits(for: .receiptScan).map(\.title) == [
+            "Automatic receipt scanning",
+            "Unlimited active jobs",
+            "Margin alerts & insights",
+        ])
     }
 
     /// Alerts and insights are one idea to a contractor, so they share a row —

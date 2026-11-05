@@ -133,13 +133,22 @@ struct LaborTimerView: View {
                     ) else { return }
                     isChoosingJob = true
                 } label: {
-                    Label("Choose a Job", systemImage: "hammer")
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
+                    HStack(spacing: 8) {
+                        Label("Choose a Job", systemImage: "hammer")
+                        if !subscriptions.isPro {
+                            ProBadge(onProminentBackground: true)
+                        }
+                    }
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .padding(.top, 6)
+                .accessibilityLabel("Choose a Job")
+                .accessibilityHint(subscriptions.isPro
+                    ? "Opens the active job picker"
+                    : "Requires MarginRun Pro and opens subscription plans")
 
                 VStack(alignment: .leading, spacing: 14) {
                     instructionRow(number: 1, text: "Choose an active job")
