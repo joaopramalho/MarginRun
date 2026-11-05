@@ -4,12 +4,49 @@
 # Xcode build output
 build/
 DerivedData/
+*.build/
+*.ipa
+*.xcarchive/
+*.dSYM
+*.dSYM.zip
 *.xcuserstate
 *.moved-aside
+*.hmap
+
+# Per-user Xcode project data and local schemes
+*.xcuserdatad/
+*.xccheckout
+*.xcscmblueprint
 
 # Per-developer Xcode state: window layout, breakpoints, scheme ordering.
 # Nothing here affects a build, and it conflicts on every pull.
 xcuserdata/
+
+# Local configuration and signing material
+.env
+.env.*
+!.env.example
+*.mobileprovision
+*.provisionprofile
+*.p12
+*.p8
+*.pfx
+*.cer
+*.certSigningRequest
+Secrets.xcconfig
+Local.xcconfig
+
+# Temporary and operating-system files
+*.tmp
+*.temp
+*.swp
+*.swo
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100/
+.Trashes/
+.fseventsd/
 
 # Generated screenshots. The light/ and dark/ catalogues are reproducible with
 # `xcodebuild test -only-testing:MarginRunUITests/ScreenshotCatalog`, and the
